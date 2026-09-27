@@ -3,6 +3,7 @@ import {
   awardPoints, awardWorkoutPoints, addFeed, notify, checkAchievements, workoutPointUnits, WORKOUT_BONUS_POINTS,
 } from "./gamification";
 import { registerAttendance } from "./attendance-service";
+import { startOfISOWeek } from "date-fns";
 
 /** Tiempo máximo de una sesión: si se supera, se cierra sola. */
 export const MAX_WORKOUT_MS = 3 * 60 * 60 * 1000; // 3 horas
@@ -364,12 +365,24 @@ export async function notifyWorkoutStartedIfDue(db: PrismaClient, userId: string
   });
   if (!workout) return;
   await db.workout.update({ where: { id: workout.id }, data: { startNotified: true } });
-  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+  const [user, weekNumber] = await Promise.all([
+    db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } }),
+    // Qué entreno de la semana es este: los empezados desde el lunes, él incluido
+    db.workout.count({
+      where: { userId, startedAt: { gte: startOfISOWeek(workout.startedAt), lte: workout.startedAt } },
+    }),
+  ]);
   const { notifyGroupFromTemplate } = await import("./notify-templates");
   await notifyGroupFromTemplate(db, userId, "FRIEND_WORKOUT_START", "workouts", {
     name: user.name,
     routine: workout.routine ? `${workout.routine.emoji} ${workout.routine.name}` : "un entrenamiento",
+    weekWorkout: weekOrdinal(weekNumber),
   });
+}
+
+/** Ordinal abreviado para el aviso de entreno: 1er, 2º, 3er, 4º… */
+function weekOrdinal(n: number): string {
+  return n === 1 || n === 3 ? `${n}er` : `${n}º`;
 }
 
 /** Tiempo sin abrir la app con un entreno en marcha antes de avisar. */

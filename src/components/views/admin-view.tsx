@@ -515,6 +515,7 @@ export function AdminView() {
             <code className="text-accent">{"{count}"}</code>,{" "}
             <code className="text-accent">{"{exercises}"}</code>,{" "}
             <code className="text-accent">{"{routine}"}</code>,{" "}
+            <code className="text-accent">{"{weekWorkout}"}</code> (1er, 2º… entreno de la semana),{" "}
             <code className="text-accent">{"{days}"}</code>,{" "}
             <code className="text-accent">{"{target}"}</code>,{" "}
             <code className="text-accent">{"{missing}"}</code>,{" "}

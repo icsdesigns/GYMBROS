@@ -84,7 +84,7 @@ const ACHIEVEMENTS: Array<{ code: string; name: string; description: string; ico
 const NOTIFICATION_TEMPLATES: Array<{ code: string; title: string; body: string }> = [
   { code: "REMINDER_WEEK_LEFT", title: "¡Te queda 1 día para cumplir tu semana! 🎯", body: "Un entreno más y mantienes la racha." },
   { code: "REMINDER_INACTIVE", title: "Te echamos de menos 😴", body: "Hace días que no entrenas. ¡Hoy es buen día para volver!" },
-  { code: "FRIEND_WORKOUT_START", title: "{name} está entrenando 🏋️", body: "Ha empezado {routine}." },
+  { code: "FRIEND_WORKOUT_START", title: "{name} está entrenando 🏋️", body: "Ha empezado {routine}. Es su {weekWorkout} entreno de la semana." },
   { code: "FRIEND_PR", title: "¡{name} ha hecho {count} PR! 🎉", body: "Acaba de superar su récord en {exercises}." },
   { code: "WEEK_COMPLETED", title: "{milestone}", body: "Has cumplido tus {target} días esta semana. {points}" },
 ];
@@ -144,6 +144,11 @@ async function main() {
     // Texto fijo anterior: no decía ni la racha ni los puntos
     WEEK_COMPLETED: ["¡Semana completada! ✅"],
   };
+  // Cuerpos antiguos que se sustituyen por la versión nueva
+  const LEGACY_BODIES: Record<string, string[]> = {
+    // No decía qué entreno de la semana era
+    FRIEND_WORKOUT_START: ["Ha empezado {routine}."],
+  };
   for (const t of NOTIFICATION_TEMPLATES) {
     const existing = await prisma.notificationTemplate.findUnique({ where: { code: t.code } });
     if (!existing) {
@@ -151,7 +156,10 @@ async function main() {
       continue;
     }
     // Solo se actualiza si el admin no lo ha personalizado
-    if ((LEGACY_TITLES[t.code] ?? []).includes(existing.title)) {
+    if (
+      (LEGACY_TITLES[t.code] ?? []).includes(existing.title) ||
+      (LEGACY_BODIES[t.code] ?? []).includes(existing.body ?? "")
+    ) {
       await prisma.notificationTemplate.update({
         where: { code: t.code },
         data: { title: t.title, body: t.body },
