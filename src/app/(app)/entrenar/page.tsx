@@ -22,8 +22,8 @@ export default function ActiveWorkoutPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
-  // Puntos del entreno (van por serie, así que cambian de una sesión a otra)
-  const [earned, setEarned] = useState(0);
+  // Desglose de todo lo que ha dado la sesión: series, fijo, PRs y racha
+  const [earned, setEarned] = useState<Array<{ label: string; points: number }>>([]);
   // Series que se quedaron sin completar: se enseñan al terminar por si fue un despiste
   const [review, setReview] = useState<{
     workoutId: string;
@@ -67,7 +67,7 @@ export default function ActiveWorkoutPage() {
       utils.invalidate();
       setFinishOpen(false);
       setResult(res.newPRs);
-      setEarned(res.workoutPoints);
+      setEarned(res.breakdown);
       setReview(res.pending.length > 0 ? { workoutId: res.workoutId, pending: res.pending } : null);
     },
   });
@@ -79,16 +79,29 @@ export default function ActiveWorkoutPage() {
       <div className="flex flex-col items-center gap-4 py-16 text-center">
         <div className="text-6xl">🎉</div>
         <h1 className="text-2xl font-bold">¡Entrenamiento guardado!</h1>
-        {result.length > 0 ? (
+        {result.length > 0 && (
           <div className="space-y-1">
             <p className="font-medium text-gold">Nuevos PRs detectados:</p>
             {result.map((pr) => (
               <p key={pr} className="text-accent">🏆 {pr}</p>
             ))}
           </div>
-        ) : earned > 0 ? (
-          <p className="text-muted">+{earned} {earned === 1 ? "punto" : "puntos"} para el ranking</p>
-        ) : null}
+        )}
+        {earned.length > 0 && (
+          <Card className="w-full max-w-md space-y-1.5 text-left text-sm">
+            <p className="mb-1 font-semibold">Puntos de la sesión</p>
+            {earned.map((l, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <span className="text-muted">{l.label}</span>
+                <span className="font-medium">+{l.points}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+              <span>Total para el ranking</span>
+              <span className="text-accent">+{earned.reduce((acc, l) => acc + l.points, 0)}</span>
+            </div>
+          </Card>
+        )}
         {corrected !== null && (
           <p className="text-sm text-accent">
             Series corregidas{corrected !== 0 ? ` (${corrected > 0 ? "+" : ""}${corrected} puntos)` : ""}. Quedó

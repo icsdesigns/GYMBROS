@@ -1,5 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
-import { awardPoints, awardWorkoutPoints, addFeed, notify, checkAchievements } from "./gamification";
+import {
+  awardPoints, awardWorkoutPoints, addFeed, notify, checkAchievements, workoutPointUnits, WORKOUT_BONUS_POINTS,
+} from "./gamification";
 import { registerAttendance } from "./attendance-service";
 
 /** Tiempo máximo de una sesión: si se supera, se cierra sola. */
@@ -85,6 +87,54 @@ export async function syncRoutineFromWorkout(
   }
 }
 
+/** Una línea del desglose de puntos que se enseña al terminar. */
+export type PointLine = { label: string; points: number };
+
+const STREAK_LABELS: Record<string, string> = {
+  STREAK_WEEK1: "Racha: 1.ª semana cumplida",
+  STREAK_WEEK2: "Racha: 2 semanas seguidas",
+  STREAK_WEEK3: "Racha: 3 semanas seguidas",
+  STREAK_MONTH: "Racha: 1 mes seguido",
+  STREAK_CRACK: "Racha: semana crack 💎",
+};
+
+/**
+ * Desglose de todo lo que ha dado terminar la sesión: series, el fijo por
+ * entrenar, cada PR y la racha si con este entreno se cumplió la semana. Sale
+ * de los eventos de puntos ya guardados, así cuadra siempre con el ranking.
+ */
+async function sessionBreakdown(
+  db: PrismaClient,
+  userId: string,
+  workout: {
+    id: string;
+    exercises: Array<{ exerciseId: string; exercise: { name: string }; sets: Array<{ completed: boolean }> }>;
+  },
+  since: Date,
+): Promise<PointLine[]> {
+  const events = await db.pointEvent.findMany({
+    where: { userId, date: { gte: since } },
+    orderBy: { date: "asc" },
+    select: { type: true, points: true, meta: true },
+  });
+  const names = new Map(workout.exercises.map((we) => [we.exerciseId, we.exercise.name]));
+  const lines: PointLine[] = [];
+  for (const e of events) {
+    const meta = (e.meta ?? {}) as { workoutId?: string; exerciseId?: string };
+    if (e.type === "WORKOUT_COMPLETED" && meta.workoutId === workout.id) {
+      const sets = workoutPointUnits(workout.exercises);
+      const bonus = Math.min(WORKOUT_BONUS_POINTS, e.points);
+      lines.push({ label: `${sets} ${sets === 1 ? "serie realizada" : "series realizadas"}`, points: e.points - bonus });
+      if (bonus > 0) lines.push({ label: "Por entrenar", points: bonus });
+    } else if (e.type === "NEW_PR" && meta.exerciseId && names.has(meta.exerciseId)) {
+      lines.push({ label: `PR en ${names.get(meta.exerciseId)}`, points: e.points });
+    } else if (STREAK_LABELS[e.type]) {
+      lines.push({ label: STREAK_LABELS[e.type]!, points: e.points });
+    }
+  }
+  return lines.filter((l) => l.points > 0);
+}
+
 /** Ejercicio con las series que se quedaron sin completar al terminar. */
 export type PendingExercise = {
   workoutExerciseId: string;
@@ -129,7 +179,13 @@ export async function finishWorkout(
   db: PrismaClient,
   workoutId: string,
   opts: { notes?: string; auto?: boolean } = {},
-): Promise<{ workoutId: string; newPRs: string[]; workoutPoints: number; pending: PendingExercise[] }> {
+): Promise<{
+  workoutId: string;
+  newPRs: string[];
+  workoutPoints: number;
+  pending: PendingExercise[];
+  breakdown: PointLine[];
+}> {
   const workout = await db.workout.findUnique({
     where: { id: workoutId },
     include: {
@@ -137,9 +193,12 @@ export async function finishWorkout(
       exercises: { include: { exercise: true, sets: true } },
     },
   });
-  if (!workout || workout.endedAt) return { workoutId, newPRs: [], workoutPoints: 0, pending: [] };
+  if (!workout || workout.endedAt) return { workoutId, newPRs: [], workoutPoints: 0, pending: [], breakdown: [] };
 
   const userId = workout.userId;
+  // Desde aquí, todo punto que se reparta sale de terminar esta sesión (margen
+  // por si el reloj de la base de datos va un poco por detrás)
+  const pointsSince = new Date(Date.now() - 5000);
   let totalVolume = 0;
   let totalSets = 0;
   let totalReps = 0;
@@ -272,7 +331,13 @@ export async function finishWorkout(
     }
   }
 
-  return { workoutId: workout.id, newPRs, workoutPoints, pending: pendingSets(workout.exercises) };
+  return {
+    workoutId: workout.id,
+    newPRs,
+    workoutPoints,
+    pending: pendingSets(workout.exercises),
+    breakdown: await sessionBreakdown(db, userId, workout, pointsSince),
+  };
 }
 
 /** Cierra los entrenamientos del usuario que lleven más de 3 horas abiertos. */
