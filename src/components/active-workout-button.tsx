@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils";
  * sitio elegido se recuerda en el propio dispositivo.
  */
 
+/** A las 3 horas el servidor cierra el entreno solo: el botón ya no pinta nada. */
+const MAX_WORKOUT_MS = 3 * 60 * 60 * 1000;
+
 /** Cada cuánto se refresca el cronómetro del botón. */
 const TICK_MS = 30_000;
 
@@ -100,7 +103,9 @@ export function ActiveWorkoutButton() {
 
   // El sitio guardado puede haber quedado fuera de una pantalla más pequeña:
   // en cuanto el botón existe de verdad, se recorta a lo que se ve.
-  const visible = Boolean(workout) && !onWorkoutScreen;
+  // Lo que haya en caché puede ser de antes del cierre automático
+  const expired = !!workout && Date.now() - workout.startedAt.getTime() > MAX_WORKOUT_MS;
+  const visible = Boolean(workout) && !onWorkoutScreen && !expired;
   useEffect(() => {
     if (!visible) return;
     const id = requestAnimationFrame(() => setOffset((current) => clamp(current, current)));
@@ -148,7 +153,7 @@ export function ActiveWorkoutButton() {
     }
   };
 
-  if (onWorkoutScreen || !workout) return null;
+  if (onWorkoutScreen || !workout || expired) return null;
 
   const pct =
     workout.totalSets > 0 ? Math.round((workout.doneSets / workout.totalSets) * 100) : 0;

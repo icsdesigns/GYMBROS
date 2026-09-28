@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { finishWorkout, autoCloseStaleWorkouts, notifyWorkoutStartedIfDue } from "@/server/services/workout-service";
+import {
+  finishWorkout, autoCloseStaleWorkouts, notifyWorkoutStartedIfDue, MAX_WORKOUT_MS,
+} from "@/server/services/workout-service";
 import { applyWorkoutIncident, MAX_INCIDENT_CHANGES } from "@/server/services/workout-incident-service";
 
 /** Cuántas sesiones anteriores se promedian para proponer peso y reps. */
@@ -137,10 +139,19 @@ export const workoutRouter = createTRPCRouter({
    * Versión ligera de `active` para el botón flotante, que se consulta en
    * TODAS las pantallas: devuelve solo lo que se pinta y no arrastra las series
    * ni dispara los efectos de autocierre.
+   *
+   * Un entreno de más de 3 horas ya no cuenta como en curso aunque aún no se
+   * haya cerrado: el cierre lo hace otra consulta que puede ir en paralelo con
+   * esta, y si esta llegaba antes el botón se quedaba colgado sobre una sesión
+   * que ya estaba cerrada.
    */
   activeBadge: protectedProcedure.query(async ({ ctx }) => {
     const workout = await ctx.db.workout.findFirst({
-      where: { userId: ctx.session.user.id, endedAt: null },
+      where: {
+        userId: ctx.session.user.id,
+        endedAt: null,
+        startedAt: { gt: new Date(Date.now() - MAX_WORKOUT_MS) },
+      },
       select: {
         id: true,
         startedAt: true,
