@@ -72,7 +72,7 @@ export function UpdatesGate() {
 
           <div className="space-y-1.5">
             <h2 className="text-xl font-bold leading-tight">{update?.title}</h2>
-            <p className="text-sm leading-snug text-muted">{update?.description}</p>
+            <p className="whitespace-pre-line text-sm leading-snug text-muted">{update?.description}</p>
           </div>
 
           <div className="flex gap-2 pt-1">
