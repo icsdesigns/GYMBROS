@@ -11,7 +11,9 @@ import { Button, Card, Input, Modal, Spinner, EmptyState, ProgressBar } from "@/
 import { WorkoutLauncher } from "@/components/workout-launcher";
 import { RestTimer } from "@/components/rest-timer";
 import { PendingSetsReview, type PendingExercise } from "@/components/pending-sets-review";
+import { ProgressLegend } from "@/components/progress-legend";
 import { cn, MUSCLE_LABELS } from "@/lib/utils";
+import { averageReps, formatReps, repsLevel, LEVEL_STYLES } from "@/lib/progress";
 
 export default function ActiveWorkoutPage() {
   const router = useRouter();
@@ -204,6 +206,10 @@ export default function ActiveWorkoutPage() {
 
       <RestTimer />
 
+      {/* Semáforo: cada serie se rodea del color de sus repeticiones y cada
+          ejercicio del de su media. Así se ve de un vistazo qué toca subir. */}
+      <ProgressLegend />
+
       {locked ? (
         <p className="flex items-center gap-1.5 text-xs text-accent">
           <Lock className="h-3.5 w-3.5" /> Entreno bloqueado: no se añaden ni se quitan series ni
@@ -211,7 +217,7 @@ export default function ActiveWorkoutPage() {
         </p>
       ) : (
         <p className="text-xs text-muted">
-          Los valores <span className="italic">en gris</span> son la media de tus últimas 5 sesiones; al
+          Los valores <span className="italic">en gris</span> son los de tu última sesión; al
           editarlos o completar la serie pasan a esta.
         </p>
       )}
@@ -219,6 +225,9 @@ export default function ActiveWorkoutPage() {
       {workout.exercises.map((we) => {
         // Los ejercicios sin peso solo piden repeticiones: la columna de kg sobra
         const noWeight = we.exercise.noWeight;
+        // El semáforo habla de subir o bajar peso: sin peso no aplica
+        const avgReps = noWeight ? null : averageReps(we.sets);
+        const exerciseLevel = repsLevel(avgReps);
         // Con el candado abierto aparece una columna más: la papelera
         const cols = noWeight
           ? locked
@@ -228,21 +237,49 @@ export default function ActiveWorkoutPage() {
             ? "grid-cols-[2rem_1fr_1fr_2.5rem]"
             : "grid-cols-[2rem_1fr_1fr_2.5rem_2rem]";
         return (
-        <Card key={we.id} className="space-y-2">
-          <p className="font-semibold">
-            {we.exercise.name}
-            {noWeight && <span className="ml-2 text-xs font-normal text-muted">sin peso</span>}
-          </p>
-          <div className={cn("grid items-center gap-2 text-xs uppercase text-muted", cols)}>
+        <Card key={we.id} className="relative space-y-2 overflow-hidden">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold">
+              {we.exercise.name}
+              {noWeight && <span className="ml-2 text-xs font-normal text-muted">sin peso</span>}
+            </p>
+            {exerciseLevel && avgReps !== null && (
+              <span
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  LEVEL_STYLES[exerciseLevel].chip,
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", LEVEL_STYLES[exerciseLevel].dot)} />
+                media {formatReps(avgReps)} reps
+              </span>
+            )}
+          </div>
+          <div className={cn("grid items-center gap-2 px-1 text-xs uppercase text-muted", cols)}>
             <span>#</span>{!noWeight && <span>Peso (kg)</span>}<span>Reps</span><span />
             {!locked && <span />}
           </div>
-          {we.sets.map((s) => (
-            <div key={s.id} className={cn("grid items-center gap-2", cols)}>
-              <span className="text-sm text-muted">{s.setNumber}</span>
+          {we.sets.map((s) => {
+            const setLevel = noWeight ? null : repsLevel(s.reps);
+            return (
+            <div
+              key={s.id}
+              className={cn(
+                "grid items-center gap-2 px-1 py-0.5",
+                cols,
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                  setLevel ? cn(LEVEL_STYLES[setLevel].solid, "shadow-sm") : "bg-surface-2 text-muted",
+                )}
+              >
+                {s.setNumber}
+              </span>
               {!noWeight && (
                 <Input
-                  type="number" min={0} step="0.5" defaultValue={s.weight || ""}
+                  type="number" min={0} step="any" defaultValue={s.weight || ""}
                   placeholder="0"
                   className={cn(!s.touched && "italic text-muted")}
                   onBlur={(e) => updateSet.mutate({ setId: s.id, weight: +e.target.value || 0 })}
@@ -275,11 +312,17 @@ export default function ActiveWorkoutPage() {
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
           {!locked && (
             <Button size="sm" variant="ghost" onClick={() => addSet.mutate({ workoutExerciseId: we.id })}>
               <Plus className="h-3.5 w-3.5" /> Añadir serie
             </Button>
+          )}
+          {/* Franja del color de la media. Va al final: con space-y-2 el primer hijo
+              no lleva margen y, si fuera ella, la cabecera bajaría 8 px. */}
+          {exerciseLevel && (
+            <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", LEVEL_STYLES[exerciseLevel].bar)} />
           )}
         </Card>
         );

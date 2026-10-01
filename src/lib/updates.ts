@@ -47,6 +47,14 @@ export type AppUpdate = {
 /** De la más reciente a la más antigua. */
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: "v4.2-semaforo-progreso",
+    date: "2026-10-02",
+    emoji: "🚦",
+    title: "Semáforo en tus entrenos y progreso de cada gymbro",
+    description:
+      "Durante el entreno, el número de cada serie se pinta de verde (12 reps o más: toca subir el peso), amarillo (de 8 a 11: sigue trabajando ese peso) o rojo (menos de 8: mejor bajarlo), y cada ejercicio lleva el color de su media. Además, en Comunidad ya puedes ver el progreso de cada gymbro en su perfil y en el contorno de color de su foto. Se desbloquea cuando completas 5 sesiones de una de tus rutinas. ¡A ponerse en verde! 💪",
+  },
+  {
     id: "v4.1-sistema-puntos",
     date: "2026-09-26",
     emoji: "📊",

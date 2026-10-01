@@ -6,38 +6,23 @@ import {
 } from "@/server/services/workout-service";
 import { applyWorkoutIncident, MAX_INCIDENT_CHANGES } from "@/server/services/workout-incident-service";
 
-/** Cuántas sesiones anteriores se promedian para proponer peso y reps. */
+/** Cuántas sesiones anteriores se miran para cazar erratas al terminar. */
 const SUGGESTION_SAMPLE = 5;
 
 /**
- * Media de las últimas sesiones de un ejercicio, serie a serie.
+ * Series de la última sesión de un ejercicio, por número de serie.
  *
- * Fijarse solo en el último entreno hacía que un mal día (o uno especialmente
- * bueno) marcara el siguiente. Con la media de las últimas cinco sesiones la
- * sugerencia refleja por dónde anda uno de verdad. Siempre en unidades enteras:
- * nadie pone 42,5 reps ni busca discos de 0,3 kg.
+ * Se proponen tal cual se hicieron, decimales incluidos: con la media de varias
+ * sesiones un 42,5 se quedaba en 43 y la sugerencia no era nada que uno hubiera
+ * levantado. Si hoy hay más series que entonces, las de más repiten la última.
  */
-function averageSets(
-  history: Array<{ sets: Array<{ setNumber: number; reps: number; weight: number }> }>,
-): Map<number, { reps: number; weight: number }> {
-  const totals = new Map<number, { reps: number; weight: number; count: number }>();
-  for (const we of history) {
-    for (const set of we.sets) {
-      const acc = totals.get(set.setNumber) ?? { reps: 0, weight: 0, count: 0 };
-      acc.reps += set.reps;
-      acc.weight += set.weight;
-      acc.count += 1;
-      totals.set(set.setNumber, acc);
-    }
-  }
-  const averages = new Map<number, { reps: number; weight: number }>();
-  totals.forEach((acc, setNumber) => {
-    averages.set(setNumber, {
-      reps: Math.round(acc.reps / acc.count),
-      weight: Math.round(acc.weight / acc.count),
-    });
-  });
-  return averages;
+function lastSessionSets(
+  sets: Array<{ setNumber: number; reps: number; weight: number }>,
+): (setNumber: number) => { reps: number; weight: number } | undefined {
+  const sorted = [...sets].sort((a, b) => a.setNumber - b.setNumber);
+  const bySet = new Map(sorted.map((s) => [s.setNumber, s]));
+  const last = sorted[sorted.length - 1];
+  return (setNumber) => bySet.get(setNumber) ?? last;
 }
 
 /**
@@ -72,30 +57,35 @@ export const workoutRouter = createTRPCRouter({
         if (routine.userId !== ctx.session.user.id && !routine.isShared) {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        // Precargar pesos y reps con la MEDIA de las últimas cinco sesiones de
-        // cada ejercicio (si no hay historial, se usa el objetivo de la
-        // rutina). touched=false hasta que se editen.
+        // Precargar pesos y reps con los de la ÚLTIMA sesión en la que se
+        // completó alguna serie de cada ejercicio (si no hay historial, se usa
+        // el objetivo de la rutina). touched=false hasta que se editen.
         exercisesData = await Promise.all(
           routine.exercises.map(async (re) => {
-            const history = await ctx.db.workoutExercise.findMany({
+            const last = await ctx.db.workoutExercise.findFirst({
               where: {
                 exerciseId: re.exerciseId,
                 workout: { userId: ctx.session.user.id, endedAt: { not: null } },
+                sets: { some: { completed: true } },
               },
               orderBy: { workout: { startedAt: "desc" } },
-              take: SUGGESTION_SAMPLE,
-              select: { sets: { select: { setNumber: true, reps: true, weight: true } } },
+              select: {
+                sets: {
+                  where: { completed: true },
+                  select: { setNumber: true, reps: true, weight: true },
+                },
+              },
             });
-            const averages = averageSets(history);
+            const previous = lastSessionSets(last?.sets ?? []);
             return {
               exerciseId: re.exerciseId,
               order: re.order,
               sets: Array.from({ length: re.sets }, (_, i) => {
-                const avg = averages.get(i + 1);
+                const prev = previous(i + 1);
                 return {
                   setNumber: i + 1,
-                  reps: avg?.reps ?? re.reps,
-                  weight: avg?.weight ?? re.targetWeight ?? 0,
+                  reps: prev?.reps ?? re.reps,
+                  weight: prev?.weight ?? re.targetWeight ?? 0,
                 };
               }),
             };

@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, Minus, Crown } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Card, Spinner, Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { LEVEL_STYLES } from "@/lib/progress";
 
 const PERIODS = [
   { key: "week", label: "Semana" },
@@ -46,6 +47,13 @@ export function RankingView() {
 
   const { data, isLoading } = api.ranking.get.useQuery({ period });
   const { data: breakdown } = api.ranking.myBreakdown.useQuery({ period });
+  // Nivel de progreso por usuario (ya precargado en Comunidad); sin nivel, sin contorno
+  const { data: users } = api.user.list.useQuery();
+  const levelById = new Map(users?.map((u) => [u.id, u.progressLevel]));
+  const ringFor = (id: string) => {
+    const level = levelById.get(id);
+    return level ? cn("ring-2 ring-offset-2 ring-offset-surface", LEVEL_STYLES[level].ring) : undefined;
+  };
   const { data: seasons } = api.ranking.seasons.useQuery(undefined, {
     enabled: period === "season",
   });
@@ -130,7 +138,7 @@ export function RankingView() {
                       </motion.div>
                     )}
                     <Link href={`/perfil/${row.user.id}`} className="flex flex-col items-center gap-2 transition hover:opacity-80">
-                      <Avatar name={row.user.name} src={row.user.avatarUrl} size={isFirst ? 56 : 44} />
+                      <Avatar name={row.user.name} src={row.user.avatarUrl} size={isFirst ? 56 : 44} className={ringFor(row.user.id)} />
                       <p className="max-w-full truncate text-sm font-medium">{row.user.name}</p>
                     </Link>
                     <p className={cn("text-lg font-bold", isFirst ? "text-gold" : "text-accent")}>
@@ -157,7 +165,7 @@ export function RankingView() {
                   {row.medal ?? row.position}
                 </span>
                 <Link href={`/perfil/${row.user.id}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
-                  <Avatar name={row.user.name} src={row.user.avatarUrl} size={36} />
+                  <Avatar name={row.user.name} src={row.user.avatarUrl} size={36} className={ringFor(row.user.id)} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{row.user.name}</p>
                     {row.user.currentStreak > 0 && (

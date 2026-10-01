@@ -6,6 +6,7 @@ import { ChevronRight, Check, Copy, LogOut, Plus, Users, KeyRound } from "lucide
 import { api } from "@/trpc/react";
 import { Button, Card, Spinner, Avatar, Modal, Input, Label } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { LEVEL_STYLES } from "@/lib/progress";
 
 /**
  * Miembros del grupo activo, con el selector de grupos encima.
@@ -100,7 +101,16 @@ export function GroupView() {
         {users?.map((u) => (
           <Link key={u.id} href={"/perfil/" + u.id}>
             <Card className="flex h-full items-center gap-3 transition hover:border-accent/40">
-              <Avatar name={u.name} src={u.avatarUrl} size={44} />
+              {/* El contorno lleva el color del progreso general de su rutina */}
+              <Avatar
+                name={u.name}
+                src={u.avatarUrl}
+                size={44}
+                className={cn(
+                  u.progressLevel &&
+                    cn("ring-2 ring-offset-2 ring-offset-surface", LEVEL_STYLES[u.progressLevel].ring),
+                )}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">
                   {u.name}

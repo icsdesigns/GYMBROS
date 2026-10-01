@@ -8,6 +8,7 @@ import { trainingProfiles, affinityBetween, affinityDetail } from "@/server/serv
 import { sendPushToUsers } from "@/server/services/push";
 import { createGroupFor, joinGroupAs } from "@/server/api/routers/group";
 import { groupMemberIds } from "@/server/services/group";
+import { progressUnlock, trainingProgress } from "@/server/services/training-progress";
 import {
   DELETION_GRACE_DAYS,
   deletionDeadline,
@@ -260,7 +261,8 @@ export const userRouter = createTRPCRouter({
           weeklyTargetDays: true, gymName: true,
         },
       });
-      const [attendances, workouts, recentPRs, routines, achievements, points, breakdownRaw, weekCount] =
+      const isSelf = input.userId === ctx.session.user.id;
+      const [attendances, workouts, recentPRs, routines, achievements, points, breakdownRaw, weekCount, progressMap] =
         await Promise.all([
           ctx.db.attendance.count({ where: { userId: user.id } }),
           ctx.db.workout.count({ where: { userId: user.id, endedAt: { not: null } } }),
@@ -305,12 +307,18 @@ export const userRouter = createTRPCRouter({
               date: { gte: startOfISOWeek(new Date()), lte: endOfISOWeek(new Date()) },
             },
           }),
+          // Progreso del perfil y, si no es el propio, también el de quien mira
+          // (para aplicar la regla de desbloqueo)
+          trainingProgress(ctx.db, isSelf ? [input.userId] : [input.userId, ctx.session.user.id]),
         ]);
       // Afinidad de entrenamiento con quien está mirando el perfil
       const profiles = await trainingProfiles(ctx.db);
       const myProfile = profiles.get(ctx.session.user.id);
       const theirProfile = profiles.get(input.userId);
-      const isSelf = input.userId === ctx.session.user.id;
+      // El progreso ajeno solo se ve con el propio ya desbloqueado; el propio, siempre
+      const lock = isSelf ? { unlocked: true, sessionsMissing: 0 } : progressUnlock(progressMap.get(ctx.session.user.id));
+      const progress = lock.unlocked ? progressMap.get(input.userId)! : null;
+      const progressLock = lock.unlocked ? null : { sessionsMissing: lock.sessionsMissing };
 
       const { lastCompletedWeek, weeklyTargetDays, ...publicUser } = user;
       return {
@@ -327,7 +335,7 @@ export const userRouter = createTRPCRouter({
             weekCount,
           }),
         },
-        attendances, workouts, recentPRs, routines, achievements,
+        attendances, workouts, recentPRs, routines, achievements, progress, progressLock,
         totalPoints: points._sum.points ?? 0,
         pointsBreakdown: breakdownRaw.map((g) => ({ type: g.type, points: g._sum.points ?? 0, count: g._count })),
       };
@@ -361,10 +369,16 @@ export const userRouter = createTRPCRouter({
       },
       orderBy: { name: "asc" },
     });
-    const streaks = await streaksForUsers(ctx.db, users);
+    const [streaks, progress] = await Promise.all([
+      streaksForUsers(ctx.db, users),
+      trainingProgress(ctx.db, users.map((u) => u.id)),
+    ]);
+    // Sin el progreso propio desbloqueado, el contorno de los demás no se ve
+    const unlocked = progressUnlock(progress.get(me)).unlocked;
     return users.map(({ lastCompletedWeek, weeklyTargetDays, ...u }) => ({
       ...u,
       currentStreak: streaks.get(u.id) ?? 0,
+      progressLevel: u.id === me || unlocked ? progress.get(u.id)?.level ?? null : null,
       isMe: u.id === me,
     }));
   }),
