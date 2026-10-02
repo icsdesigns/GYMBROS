@@ -6,7 +6,7 @@ import { es } from "date-fns/locale";
 import { Trophy, AlertTriangle } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Card, Spinner } from "@/components/ui";
-import { MonthCalendar } from "@/components/month-calendar";
+import { MonthBrowser } from "@/components/month-browser";
 import { PointsBreakdown } from "@/components/points-breakdown";
 import { PointsInfo } from "@/components/points-info";
 import { StreakProgress } from "@/components/streak-progress";
@@ -64,15 +64,9 @@ export default function DashboardPage() {
 
         {/* Calendario del mes */}
         <Card>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold capitalize">
-              {format(now, "MMMM yyyy", { locale: es })}
-            </h2>
-          </div>
-          <MonthCalendar
-            year={now.getFullYear()}
-            month={now.getMonth()}
-            trainedDates={data.monthAttendanceDates}
+          <MonthBrowser
+            currentMonthDates={data.monthAttendanceDates}
+            firstAttendanceDate={data.firstAttendanceDate}
           />
         </Card>
 

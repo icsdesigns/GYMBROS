@@ -109,6 +109,8 @@ export const dashboardRouter = createTRPCRouter({
       },
       weekAttendances,
       monthAttendanceDates: monthAttendances.map((a) => a.date),
+      // Inicio lo usa como límite para navegar a meses anteriores.
+      firstAttendanceDate: firstAttendance?.date ?? null,
       pointsBreakdown,
       totalPoints,
       streakRules,
