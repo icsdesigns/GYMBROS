@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { api } from "@/trpc/react";
 import { Spinner, EmptyState } from "@/components/ui";
+import { StableMarkBadge, StableMarkLegend } from "@/components/stable-mark";
 
 /**
  * Récords personales: para cada rutina, la mejor marca de cada uno de sus
@@ -12,6 +13,7 @@ import { Spinner, EmptyState } from "@/components/ui";
  */
 export function PRsView() {
   const { data: groups, isLoading } = api.pr.byRoutine.useQuery();
+  const { data: marks } = api.workout.stableMarks.useQuery();
 
   if (isLoading) return <Spinner />;
 
@@ -28,6 +30,7 @@ export function PRsView() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Récords personales</h1>
+      <StableMarkLegend />
 
       {groups.map((group) => (
         <section key={group.id} className="space-y-2">
@@ -51,6 +54,9 @@ export function PRsView() {
                   {r.noWeight ? "" : `× ${r.reps} · `}
                   {format(r.date, "d MMM yyyy", { locale: es })}
                 </p>
+                {!r.noWeight && marks?.[r.exerciseId] && (
+                  <StableMarkBadge mark={marks[r.exerciseId]} className="mt-1.5" />
+                )}
               </div>
             ))}
           </div>

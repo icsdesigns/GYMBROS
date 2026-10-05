@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Plus, Square, Timer, Lock, LockOpen, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Info, Plus, Square, Timer, Lock, LockOpen, Trash2, TriangleAlert } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
 import { api } from "@/trpc/react";
@@ -12,6 +12,7 @@ import { WorkoutLauncher } from "@/components/workout-launcher";
 import { RestTimer } from "@/components/rest-timer";
 import { PendingSetsReview, type PendingExercise } from "@/components/pending-sets-review";
 import { ProgressLegend } from "@/components/progress-legend";
+import { StableMarkBadge, StableMarkLegend } from "@/components/stable-mark";
 import { cn, MUSCLE_LABELS } from "@/lib/utils";
 import { averageReps, formatReps, repsLevel, LEVEL_STYLES } from "@/lib/progress";
 
@@ -20,8 +21,10 @@ export default function ActiveWorkoutPage() {
   const utils = api.useUtils();
   const { data: workout, isLoading } = api.workout.active.useQuery();
   const { data: catalog } = api.exercise.list.useQuery();
+  const { data: marks } = api.workout.stableMarks.useQuery();
   const [finishOpen, setFinishOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<string[] | null>(null);
   // Desglose de todo lo que ha dado la sesión: series, fijo, PRs y racha
@@ -166,7 +169,15 @@ export default function ActiveWorkoutPage() {
             Empezado hace {formatDistanceToNowStrict(workout.startedAt, { locale: es })}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            onClick={() => setInfoOpen(true)}
+            aria-label="Cómo leer el entreno"
+            title="Cómo leer el entreno"
+            className="rounded-full border border-border bg-surface p-2 text-muted transition hover:border-accent/50 hover:text-accent"
+          >
+            <Info className="h-4 w-4" />
+          </button>
           {/* El candado cierra la estructura del entreno —series y ejercicios—,
               no los datos: pesos, reps y completado se siguen tocando igual.
               Viene puesto: durante la sesión se pulsa a ciegas y era fácil
@@ -206,19 +217,10 @@ export default function ActiveWorkoutPage() {
 
       <RestTimer />
 
-      {/* Semáforo: cada serie se rodea del color de sus repeticiones y cada
-          ejercicio del de su media. Así se ve de un vistazo qué toca subir. */}
-      <ProgressLegend />
-
-      {locked ? (
+      {locked && (
         <p className="flex items-center gap-1.5 text-xs text-accent">
           <Lock className="h-3.5 w-3.5" /> Entreno bloqueado: no se añaden ni se quitan series ni
           ejercicios. Pesos y repeticiones se editan con normalidad.
-        </p>
-      ) : (
-        <p className="text-xs text-muted">
-          Los valores <span className="italic">en gris</span> son los de tu última sesión; al
-          editarlos o completar la serie pasan a esta.
         </p>
       )}
 
@@ -243,17 +245,20 @@ export default function ActiveWorkoutPage() {
               {we.exercise.name}
               {noWeight && <span className="ml-2 text-xs font-normal text-muted">sin peso</span>}
             </p>
-            {exerciseLevel && avgReps !== null && (
-              <span
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  LEVEL_STYLES[exerciseLevel].chip,
-                )}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", LEVEL_STYLES[exerciseLevel].dot)} />
-                media {formatReps(avgReps)} reps
-              </span>
-            )}
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+              {!noWeight && <StableMarkBadge mark={marks?.[we.exercise.id]} />}
+              {exerciseLevel && avgReps !== null && (
+                <span
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    LEVEL_STYLES[exerciseLevel].chip,
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", LEVEL_STYLES[exerciseLevel].dot)} />
+                  media {formatReps(avgReps)} reps
+                </span>
+              )}
+            </div>
           </div>
           <div className={cn("grid items-center gap-2 px-1 text-xs uppercase text-muted", cols)}>
             <span>#</span>{!noWeight && <span>Peso (kg)</span>}<span>Reps</span><span />
@@ -419,6 +424,34 @@ export default function ActiveWorkoutPage() {
           </Modal>
         );
       })()}
+
+      <Modal open={infoOpen} onClose={() => setInfoOpen(false)} title="Cómo leer el entreno">
+        <div className="space-y-4">
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Semáforo de repeticiones
+            </h3>
+            {/* Semáforo: cada serie se rodea del color de sus repeticiones y cada
+                ejercicio del de su media. Así se ve de un vistazo qué toca subir. */}
+            <ProgressLegend />
+          </section>
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Mejor marca estable
+            </h3>
+            <StableMarkLegend />
+          </section>
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Valores en gris
+            </h3>
+            <p className="text-sm text-muted">
+              Los valores <span className="italic">en gris</span> son los de tu última sesión; al
+              editarlos o completar la serie pasan a esta.
+            </p>
+          </section>
+        </div>
+      </Modal>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Añadir ejercicio">
         {/* El propio modal limita la altura y hace scroll */}

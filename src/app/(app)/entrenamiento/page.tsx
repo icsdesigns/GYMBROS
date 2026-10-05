@@ -39,6 +39,7 @@ function TrainingContent() {
     void utils.plan.get.prefetch();
     void utils.routine.shared.prefetch();
     void utils.pr.byRoutine.prefetch();
+    void utils.workout.stableMarks.prefetch();
     void utils.exercise.list.prefetch();
     void utils.workout.history.prefetch({ limit: 30 });
     void utils.stats.routineTrends.prefetch();

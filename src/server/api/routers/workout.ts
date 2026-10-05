@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { computeStableMarks, type StableMark } from "@/lib/stable-mark";
 import {
   finishWorkout, autoCloseStaleWorkouts, notifyWorkoutStartedIfDue, MAX_WORKOUT_MS,
 } from "@/server/services/workout-service";
@@ -408,6 +409,27 @@ export const workoutRouter = createTRPCRouter({
       if (!result) throw new TRPCError({ code: "FORBIDDEN" });
       return result;
     }),
+
+  /**
+   * Mejor marca estable de cada ejercicio con peso del usuario (ver
+   * lib/stable-mark): clave = exerciseId.
+   */
+  stableMarks: protectedProcedure.query(async ({ ctx }): Promise<Record<string, StableMark>> => {
+    const workouts = await ctx.db.workout.findMany({
+      where: { userId: ctx.session.user.id, endedAt: { not: null } },
+      select: {
+        startedAt: true,
+        exercises: {
+          where: { exercise: { noWeight: false } },
+          select: {
+            exerciseId: true,
+            sets: { select: { reps: true, weight: true, completed: true } },
+          },
+        },
+      },
+    });
+    return computeStableMarks(workouts);
+  }),
 
   history: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }).optional())
