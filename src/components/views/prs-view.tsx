@@ -55,7 +55,7 @@ export function PRsView() {
                   {format(r.date, "d MMM yyyy", { locale: es })}
                 </p>
                 {!r.noWeight && marks?.[r.exerciseId] && (
-                  <StableMarkBadge mark={marks[r.exerciseId]} className="mt-1.5" />
+                  <StableMarkBadge mark={marks[r.exerciseId]} className="mt-1.5" inline />
                 )}
               </div>
             ))}

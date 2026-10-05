@@ -14,7 +14,7 @@ import { PendingSetsReview, type PendingExercise } from "@/components/pending-se
 import { ProgressLegend } from "@/components/progress-legend";
 import { StableMarkBadge, StableMarkLegend } from "@/components/stable-mark";
 import { cn, MUSCLE_LABELS } from "@/lib/utils";
-import { averageReps, formatReps, repsLevel, LEVEL_STYLES } from "@/lib/progress";
+import { averageReps, repsLevel, LEVEL_STYLES } from "@/lib/progress";
 
 export default function ActiveWorkoutPage() {
   const router = useRouter();
@@ -247,17 +247,6 @@ export default function ActiveWorkoutPage() {
             </p>
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
               {!noWeight && <StableMarkBadge mark={marks?.[we.exercise.id]} />}
-              {exerciseLevel && avgReps !== null && (
-                <span
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                    LEVEL_STYLES[exerciseLevel].chip,
-                  )}
-                >
-                  <span className={cn("h-1.5 w-1.5 rounded-full", LEVEL_STYLES[exerciseLevel].dot)} />
-                  media {formatReps(avgReps)} reps
-                </span>
-              )}
             </div>
           </div>
           <div className={cn("grid items-center gap-2 px-1 text-xs uppercase text-muted", cols)}>

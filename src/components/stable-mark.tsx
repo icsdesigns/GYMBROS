@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { Anchor, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STABLE_MARK_MIN_REPS, type StableMark } from "@/lib/stable-mark";
@@ -10,37 +13,77 @@ const STYLES = {
   confirmed: "border border-sky-400/40 bg-sky-500/15 text-sky-500 dark:text-sky-300",
 };
 
+/** Texto que explica la marca; sale al pulsar la pastilla y como tooltip en escritorio. */
+function markLabel(mark: StableMark) {
+  return mark.confirmed
+    ? `Marca estable confirmada: ${kg(mark.weight)} con ${STABLE_MARK_MIN_REPS}+ reps en todas las series en ${mark.sessions} sesiones. Peso fiable`
+    : `Marca estable: ${kg(mark.weight)} con ${STABLE_MARK_MIN_REPS}+ reps en todas las series. Repítela en otra sesión para confirmarla`;
+}
+
 /**
  * Pastilla de la marca estable de un ejercicio: el mayor peso con 12+ reps en
  * todas las series de una sesión. Confirmada cuando se repite en otra sesión.
+ * Al pulsarla explica qué es: en flotante bajo la pastilla o, con `inline`, como
+ * texto en el flujo (para tarjetas estrechas donde un flotante se saldría).
  */
 export function StableMarkBadge({
   mark,
   className,
+  inline = false,
 }: {
   mark: StableMark | undefined;
   className?: string;
+  inline?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Un toque fuera la cierra
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+
   if (!mark) return null;
 
-  const label = mark.confirmed
-    ? `Marca estable confirmada: ${kg(mark.weight)} con ${STABLE_MARK_MIN_REPS}+ reps en todas las series en ${mark.sessions} sesiones. Peso fiable`
-    : `Marca estable: ${kg(mark.weight)} con ${STABLE_MARK_MIN_REPS}+ reps en todas las series. Repítela en otra sesión para confirmarla`;
+  const label = markLabel(mark);
   const Icon = mark.confirmed ? ShieldCheck : Anchor;
-
-  return (
-    <span
-      title={label}
-      aria-label={label}
+  const note = (
+    <p
+      role="status"
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-        mark.confirmed ? STYLES.confirmed : STYLES.pending,
-        className,
+        "text-[11px] leading-snug",
+        inline
+          ? "mt-1 text-muted"
+          : "absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-border bg-surface-2 p-2.5 text-left font-normal text-fg shadow-lg",
       )}
     >
-      <Icon className="h-3 w-3 shrink-0" aria-hidden />
-      {kg(mark.weight)}
-    </span>
+      {label}
+    </p>
+  );
+
+  return (
+    <div ref={ref} className={cn(inline ? "" : "relative", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title={label}
+        aria-label={label}
+        aria-expanded={open}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+          mark.confirmed ? STYLES.confirmed : STYLES.pending,
+        )}
+      >
+        <Icon className="h-3 w-3 shrink-0" aria-hidden />
+        {kg(mark.weight)}
+      </button>
+      {open && note}
+    </div>
   );
 }
 
