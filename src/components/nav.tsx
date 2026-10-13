@@ -6,6 +6,7 @@ import { LayoutDashboard, Dumbbell, Users, Building2, Bell, Settings, AlertTrian
 import { cn } from "@/lib/utils";
 import { api } from "@/trpc/react";
 import { Logo } from "@/components/logo";
+import { ActiveWorkoutChip } from "@/components/active-workout-chip";
 
 const NAV = [
   { href: "/panel", label: "Inicio", icon: LayoutDashboard, match: /^\/panel/ },
@@ -49,6 +50,8 @@ export function Sidebar() {
         <Logo size={28} />
         <span>Gym<span className="text-accent">Bros</span></span>
       </Link>
+      {/* Entreno en curso: acceso directo mientras haya una sesión abierta */}
+      <ActiveWorkoutChip variant="sidebar" />
       <nav className="flex-1 space-y-1">
         {withNotifications.map(({ href, label, icon: Icon, match }) => (
           <Link
@@ -124,11 +127,14 @@ export function MobileHeader() {
     // El relleno superior suma el área segura del sistema: sin ella, en los
     // móviles con notch la cabecera se solapaba con la hora y la batería.
     <header className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-border/60 bg-bg/80 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl md:hidden">
-      <Link href="/panel" className="flex items-center gap-2 text-lg font-extrabold">
+      <Link href="/panel" className="flex min-w-0 items-center gap-2 text-lg font-extrabold">
         <Logo size={24} />
-        <span>Gym<span className="text-accent">Bros</span></span>
+        {/* En pantallas muy estrechas, con el entreno en curso, el nombre cede sitio */}
+        <span className="truncate">Gym<span className="text-accent">Bros</span></span>
       </Link>
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
+        {/* Entreno en curso: compacto, entre el logo y los iconos */}
+        <ActiveWorkoutChip variant="header" className="mr-1" />
         <Link href="/comunidad?tab=chat" className="relative rounded-full p-2 text-muted hover:text-fg" aria-label="Chat del grupo">
           <MessageCircle className="h-5 w-5" />
           {(unreadChat ?? 0) > 0 && (

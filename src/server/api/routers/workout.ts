@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { computeStableMarks, type StableMark } from "@/lib/stable-mark";
 import {
-  finishWorkout, autoCloseStaleWorkouts, notifyWorkoutStartedIfDue, MAX_WORKOUT_MS,
+  finishWorkout, autoCloseStaleWorkouts, notifyWorkoutStartedIfDue, touchWorkoutActivity, MAX_WORKOUT_MS,
 } from "@/server/services/workout-service";
 import { applyWorkoutIncident, MAX_INCIDENT_CHANGES } from "@/server/services/workout-incident-service";
 
@@ -94,7 +94,7 @@ export const workoutRouter = createTRPCRouter({
         );
       }
 
-      return ctx.db.workout.create({
+      const created = await ctx.db.workout.create({
         data: {
           userId: ctx.session.user.id,
           routineId: input.routineId,
@@ -107,6 +107,21 @@ export const workoutRouter = createTRPCRouter({
           },
         },
       });
+
+      // Dos «Empezar» a la vez (doble toque, dos pestañas) pasan los dos la
+      // comprobación de arriba y dejarían dos sesiones abiertas, cada una con
+      // su aviso al grupo. Se queda la más antigua y la sobrante se borra.
+      const open = await ctx.db.workout.findMany({
+        where: { userId: ctx.session.user.id, endedAt: null },
+        orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+      const keep = open[0];
+      if (keep && keep.id !== created.id) {
+        await ctx.db.workout.deleteMany({ where: { id: created.id } });
+        return ctx.db.workout.findUniqueOrThrow({ where: { id: keep.id } });
+      }
+      return created;
     }),
 
   active: protectedProcedure.query(async ({ ctx }) => {
@@ -260,7 +275,12 @@ export const workoutRouter = createTRPCRouter({
       }
       const { setId, ...data } = input;
       // Editar o completar una serie la marca como "de esta sesión"
-      return ctx.db.workoutSet.update({ where: { id: setId }, data: { ...data, touched: true } });
+      const [updated] = await Promise.all([
+        ctx.db.workoutSet.update({ where: { id: setId }, data: { ...data, touched: true } }),
+        // Señal de actividad para el aviso de «entreno parado» (ver workout-service)
+        touchWorkoutActivity(ctx.db, ctx.session.user.id),
+      ]);
+      return updated;
     }),
 
   addSet: protectedProcedure
@@ -272,14 +292,18 @@ export const workoutRouter = createTRPCRouter({
       });
       if (!we || we.workout.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       const last = we.sets[0];
-      return ctx.db.workoutSet.create({
-        data: {
-          workoutExerciseId: we.id,
-          setNumber: (last?.setNumber ?? 0) + 1,
-          reps: last?.reps ?? 10,
-          weight: last?.weight ?? 0,
-        },
-      });
+      const [created] = await Promise.all([
+        ctx.db.workoutSet.create({
+          data: {
+            workoutExerciseId: we.id,
+            setNumber: (last?.setNumber ?? 0) + 1,
+            reps: last?.reps ?? 10,
+            weight: last?.weight ?? 0,
+          },
+        }),
+        touchWorkoutActivity(ctx.db, ctx.session.user.id),
+      ]);
+      return created;
     }),
 
   /**
@@ -307,11 +331,12 @@ export const workoutRouter = createTRPCRouter({
       await ctx.db.workoutSet.delete({ where: { id: set.id } });
       // Las que iban detrás suben un número: la lista no deja huecos
       const after = set.workoutExercise.sets.filter((x) => x.setNumber > set.setNumber);
-      await Promise.all(
-        after.map((x) =>
+      await Promise.all([
+        ...after.map((x) =>
           ctx.db.workoutSet.update({ where: { id: x.id }, data: { setNumber: x.setNumber - 1 } }),
         ),
-      );
+        touchWorkoutActivity(ctx.db, ctx.session.user.id),
+      ]);
       return { ok: true };
     }),
 
@@ -323,14 +348,18 @@ export const workoutRouter = createTRPCRouter({
         include: { exercises: { orderBy: { order: "desc" }, take: 1 } },
       });
       if (!workout || workout.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
-      return ctx.db.workoutExercise.create({
-        data: {
-          workoutId: workout.id,
-          exerciseId: input.exerciseId,
-          order: (workout.exercises[0]?.order ?? -1) + 1,
-          sets: { create: [{ setNumber: 1, reps: 10, weight: 0 }] },
-        },
-      });
+      const [created] = await Promise.all([
+        ctx.db.workoutExercise.create({
+          data: {
+            workoutId: workout.id,
+            exerciseId: input.exerciseId,
+            order: (workout.exercises[0]?.order ?? -1) + 1,
+            sets: { create: [{ setNumber: 1, reps: 10, weight: 0 }] },
+          },
+        }),
+        touchWorkoutActivity(ctx.db, ctx.session.user.id),
+      ]);
+      return created;
     }),
 
   cancel: protectedProcedure.input(z.object({ workoutId: z.string() })).mutation(async ({ ctx, input }) => {

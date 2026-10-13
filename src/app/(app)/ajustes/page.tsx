@@ -96,6 +96,8 @@ export default function SettingsPage() {
 
   const update = api.user.updateProfile.useMutation({
     onSuccess: () => { utils.user.me.invalidate(); setMessage("Guardado ✅"); },
+    // p. ej. «Ya hay alguien con ese nombre»
+    onError: (e) => setMessage(e.message),
   });
   const changePassword = api.user.changePassword.useMutation({
     onSuccess: () => { setPasswords({ current: "", next: "" }); setMessage("Contraseña cambiada ✅"); },

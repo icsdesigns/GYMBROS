@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Search, Globe, Lock, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, Search, Globe, Lock, ArrowUp, ArrowDown, Undo2 } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui";
 import { MUSCLE_LABELS, cn } from "@/lib/utils";
@@ -35,6 +35,12 @@ export type RoutineFormValue = {
   exercises: RoutineFormExercise[];
 };
 
+/** Rutina en blanco: punto de partida de "Nueva rutina". */
+const BLANK_ROUTINE: RoutineFormValue = {
+  name: "", description: "", color: "#22c55e", emoji: "💪",
+  recommendedDays: [], timesPerWeek: 1, estimatedMinutes: 60, exercises: [],
+};
+
 export function RoutineForm({
   initial,
   routineId,
@@ -47,12 +53,10 @@ export function RoutineForm({
   const { data: catalog } = api.exercise.list.useQuery();
   const { data: me } = api.user.me.useQuery();
 
-  const [form, setForm] = useState<RoutineFormValue>(
-    initial ?? {
-      name: "", description: "", color: "#22c55e", emoji: "💪",
-      recommendedDays: [], timesPerWeek: 1, estimatedMinutes: 60, exercises: [],
-    },
-  );
+  // Estado de partida: lo guardado al editar, o en blanco al crear. Es a lo que
+  // vuelve "Descartar cambios" y con lo que se mide si hay algo sin guardar.
+  const baseline = initial ?? BLANK_ROUTINE;
+  const [form, setForm] = useState<RoutineFormValue>(baseline);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [draftRestored, setDraftRestored] = useState(false);
@@ -67,7 +71,11 @@ export function RoutineForm({
       const raw = localStorage.getItem(draftKey);
       if (raw) {
         const draft = JSON.parse(raw) as RoutineFormValue;
-        if (draft && typeof draft.name === "string" && Array.isArray(draft.exercises)) {
+        // Un borrador idéntico al estado de partida no es un cambio que recuperar
+        if (
+          draft && typeof draft.name === "string" && Array.isArray(draft.exercises) &&
+          JSON.stringify(draft) !== JSON.stringify(baseline)
+        ) {
           setForm(draft);
           setDraftRestored(true);
         }
@@ -83,7 +91,9 @@ export function RoutineForm({
     if (!draftLoaded.current) return;
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(draftKey, JSON.stringify(form));
+        // Sin cambios no se guarda borrador: así no queda uno idéntico al original
+        if (JSON.stringify(form) === JSON.stringify(baseline)) localStorage.removeItem(draftKey);
+        else localStorage.setItem(draftKey, JSON.stringify(form));
       } catch {
         /* almacenamiento lleno: se ignora */
       }
@@ -91,14 +101,18 @@ export function RoutineForm({
     return () => clearTimeout(t);
   }, [form, draftKey]);
 
-  function discardDraft() {
-    localStorage.removeItem(draftKey);
-    setForm(
-      initial ?? {
-        name: "", description: "", color: "#22c55e", emoji: "💪",
-        recommendedDays: [], timesPerWeek: 1, estimatedMinutes: 60, exercises: [],
-      },
-    );
+  // ¿Hay cambios sin guardar respecto al estado de partida?
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
+
+  /** Devuelve la rutina a como estaba antes de editarla, sin guardar nada. */
+  function discardChanges() {
+    if (dirty && !confirm("¿Descartar los cambios? La rutina vuelve a como estaba antes de editarla.")) return;
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {
+      /* sin memoria del dispositivo: no hay borrador que borrar */
+    }
+    setForm(baseline);
     setDraftRestored(false);
   }
 
@@ -220,8 +234,8 @@ export function RoutineForm({
       {draftRestored && (
         <Card className="flex items-center justify-between gap-3 border-amber-400/40 bg-amber-400/5 py-3">
           <p className="text-sm">Se recuperó un borrador sin guardar.</p>
-          <Button size="sm" variant="ghost" onClick={discardDraft}>
-            Descartar borrador
+          <Button size="sm" variant="ghost" onClick={discardChanges}>
+            <Undo2 className="h-3.5 w-3.5" /> Descartar cambios
           </Button>
         </Card>
       )}
@@ -430,15 +444,29 @@ export function RoutineForm({
         {mutationError && (
           <p className="text-sm text-red-400">Error al guardar: {mutationError.message}</p>
         )}
-        <Button
-          size="lg"
-          className="w-full sm:w-auto"
-          disabled={missing.length > 0}
-          loading={create.isLoading || update.isLoading}
-          onClick={submit}
-        >
-          {routineId ? "Guardar cambios" : "Crear rutina"}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            disabled={missing.length > 0}
+            loading={create.isLoading || update.isLoading}
+            onClick={submit}
+          >
+            {routineId ? "Guardar cambios" : "Crear rutina"}
+          </Button>
+          {/* Solo aparece si se ha tocado algo: sin cambios no hay nada que descartar */}
+          {dirty && (
+            <Button
+              size="lg"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              disabled={create.isLoading || update.isLoading}
+              onClick={discardChanges}
+            >
+              <Undo2 className="h-4 w-4" /> Descartar cambios
+            </Button>
+          )}
+        </div>
       </div>
 
       <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Añadir ejercicio">

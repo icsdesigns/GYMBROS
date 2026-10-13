@@ -32,6 +32,19 @@ function computeTrend(volumes: number[]): { direction: TrendDirection; changePct
 }
 
 /**
+ * Variación (en %) del volumen de la última sesión frente a la anterior. Es lo
+ * que se enseña entre paréntesis junto al volumen: el volumen que se ve es el de
+ * la última sesión, así que el incremento se mide contra la que tenía delante.
+ * Sin dos sesiones, o con la anterior a cero, no hay porcentaje que dar.
+ */
+function lastChangePct(volumes: number[]): number | null {
+  const last = volumes.at(-1);
+  const previous = volumes.at(-2);
+  if (last === undefined || previous === undefined || previous <= 0) return null;
+  return ((last - previous) / previous) * 100;
+}
+
+/**
  * Tendencia de una rutina completa: mismo cálculo que por ejercicio, pero sobre
  * el volumen total de cada sesión de esa rutina.
  *
@@ -50,6 +63,8 @@ function routineTrend(sessions: Map<string, { date: Date; kg: number; reps: numb
     unit: useKg ? ("kg" as const) : ("reps" as const),
     sessions: list.length,
     last: volumes.at(-1) ?? null,
+    /** Incremento de la última sesión respecto a la anterior (%). */
+    lastChangePct: lastChangePct(volumes),
     best: volumes.length > 0 ? Math.max(...volumes) : null,
     lastDate: list.at(-1)?.date ?? null,
     direction,
@@ -140,6 +155,8 @@ export async function routineTrendsFor(db: PrismaClient, userId: string) {
         unit: noWeight ? ("reps" as const) : ("kg" as const),
         sessions: sessions.length,
         last: volumes.at(-1) ?? null,
+        /** Incremento de la última sesión respecto a la anterior (%). */
+        lastChangePct: lastChangePct(volumes),
         best: volumes.length > 0 ? Math.max(...volumes) : null,
         lastDate: sessions.at(-1)?.date ?? null,
         direction,

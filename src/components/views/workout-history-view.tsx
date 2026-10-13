@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { format, differenceInMinutes, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronDown, Check, Trash2, Wrench } from "lucide-react";
+import { ChevronDown, Check, Trash2, Wrench, Info } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Button, Card, Badge, Modal, EmptyState, Spinner } from "@/components/ui";
-import { formatKg } from "@/lib/utils";
+import { cn, formatKg } from "@/lib/utils";
+import { repsLevel, LEVEL_STYLES } from "@/lib/progress";
+import { ProgressLegend } from "@/components/progress-legend";
 import { WorkoutIncidentModal } from "@/components/workout-incident-modal";
 
 /**
@@ -14,12 +16,18 @@ import { WorkoutIncidentModal } from "@/components/workout-incident-modal";
  * series. Desde aquí también se borra un día completo (entreno, puntos, PRs
  * automáticos y publicaciones que generó), que es la única vía que queda tras
  * retirar el apartado de asistencia.
+ *
+ * Cada serie completada lleva el color del semáforo de repeticiones (el mismo
+ * de Entrenar). No hay media de reps por ejercicio: en Entrenar la sustituyó
+ * la marca estable. Los ejercicios sin peso no entran: el semáforo habla de
+ * subir o bajar kilos.
  */
 export function WorkoutHistoryView() {
   const utils = api.useUtils();
   const [dayDetail, setDayDetail] = useState<Date | null>(null);
   // Sesión sobre la que se está abriendo una incidencia
   const [incident, setIncident] = useState<string | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
   const { data: workouts, isLoading } = api.workout.history.useQuery({ limit: 30 });
   const { data: day, isFetching: dayLoading } = api.attendance.day.useQuery(
     { date: dayDetail ?? new Date() },
@@ -40,7 +48,17 @@ export function WorkoutHistoryView() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xl font-bold">Historial de entrenamientos</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xl font-bold">Historial de entrenamientos</h2>
+        <button
+          onClick={() => setLegendOpen(true)}
+          aria-label="Qué significan los colores de las series"
+          title="Qué significan los colores de las series"
+          className="shrink-0 rounded-full border border-border bg-surface p-2 text-muted transition hover:border-accent/50 hover:text-accent"
+        >
+          <Info className="h-4 w-4" />
+        </button>
+      </div>
 
       {isLoading ? (
         <Spinner />
@@ -76,23 +94,31 @@ export function WorkoutHistoryView() {
             </summary>
             <div className="space-y-3 border-t border-border p-4 pt-3">
               {w.exercises.map((we) => (
-                <div key={we.id}>
-                  <p className="mb-1 text-sm font-medium">{we.exercise.name}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {we.sets.map((s) => (
-                      <span
-                        key={s.id}
-                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs ${
-                          s.completed ? "bg-accent/15 text-accent" : "bg-surface-2 text-muted line-through"
-                        }`}
-                      >
-                        {!we.exercise.noWeight && s.weight > 0 ? `${s.weight} kg × ` : ""}
-                        {s.reps}
-                        {s.completed && <Check className="h-3 w-3" />}
-                      </span>
-                    ))}
+                  <div key={we.id}>
+                    <p className="mb-1 text-sm font-medium">{we.exercise.name}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {we.sets.map((s) => {
+                        const level = we.exercise.noWeight || !s.completed ? null : repsLevel(s.reps);
+                        return (
+                          <span
+                            key={s.id}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs",
+                              !s.completed
+                                ? "bg-surface-2 text-muted line-through"
+                                : level
+                                  ? cn(LEVEL_STYLES[level].chip, "ring-1 ring-inset", LEVEL_STYLES[level].ring)
+                                  : "bg-accent/15 text-accent",
+                            )}
+                          >
+                            {!we.exercise.noWeight && s.weight > 0 ? `${s.weight} kg × ` : ""}
+                            {s.reps}
+                            {s.completed && <Check className="h-3 w-3" />}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
               ))}
               {w.notes && <p className="text-xs text-muted">📝 {w.notes}</p>}
               {/* Lo que se corrigió, para que la sesión no cambie sin explicación */}
@@ -132,6 +158,16 @@ export function WorkoutHistoryView() {
           </details>
         ))
       )}
+
+      <Modal open={legendOpen} onClose={() => setLegendOpen(false)} title="Semáforo de repeticiones">
+        <div className="space-y-3">
+          <p className="text-sm text-muted">
+            Cada serie completada de un ejercicio con peso se colorea según sus repeticiones.
+            Los ejercicios sin peso no se colorean.
+          </p>
+          <ProgressLegend />
+        </div>
+      </Modal>
 
       <Modal
         open={dayDetail !== null}
@@ -176,15 +212,27 @@ export function WorkoutHistoryView() {
                   <p className="text-xs text-muted">
                     {formatKg(w.totalVolume)} · {w.totalSets} series · {w.totalReps} reps
                   </p>
-                  {w.exercises.map((we) => (
-                    <p key={we.id} className="text-xs text-muted">
-                      {we.exercise.name}:{" "}
-                      {we.sets
-                        .filter((s) => s.completed)
-                        .map((s) => (we.exercise.noWeight ? `${s.reps}` : `${s.weight}×${s.reps}`))
-                        .join(" · ") || "sin series completadas"}
-                    </p>
-                  ))}
+                  {w.exercises.map((we) => {
+                    const done = we.sets.filter((s) => s.completed);
+                    return (
+                      <p key={we.id} className="text-xs text-muted">
+                        {we.exercise.name}:{" "}
+                        {done.length === 0
+                          ? "sin series completadas"
+                          : done.map((s, i) => {
+                              const level = we.exercise.noWeight ? null : repsLevel(s.reps);
+                              return (
+                                <span key={s.id}>
+                                  {i > 0 && " · "}
+                                  <span className={cn(level && cn("font-semibold", LEVEL_STYLES[level].text))}>
+                                    {we.exercise.noWeight ? `${s.reps}` : `${s.weight}×${s.reps}`}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                      </p>
+                    );
+                  })}
                 </Card>
               ))
             )}

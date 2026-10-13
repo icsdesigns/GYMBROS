@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, Info, Plus, Square, Timer, Lock, LockOpen, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Info, Plus, Square, Timer, Lock, LockOpen, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
 import { api } from "@/trpc/react";
@@ -13,6 +13,8 @@ import { RestTimer } from "@/components/rest-timer";
 import { PendingSetsReview, type PendingExercise } from "@/components/pending-sets-review";
 import { ProgressLegend } from "@/components/progress-legend";
 import { StableMarkBadge, StableMarkLegend } from "@/components/stable-mark";
+import { StableIntroModal } from "@/components/stable-intro-modal";
+import { useWorkoutEditJournal } from "@/lib/use-workout-edit-journal";
 import { cn, MUSCLE_LABELS } from "@/lib/utils";
 import { averageReps, repsLevel, LEVEL_STYLES } from "@/lib/progress";
 
@@ -22,6 +24,15 @@ export default function ActiveWorkoutPage() {
   const { data: workout, isLoading } = api.workout.active.useQuery();
   const { data: catalog } = api.exercise.list.useQuery();
   const { data: marks } = api.workout.stableMarks.useQuery();
+  // /entrenar?preview-anuncio=1 enseña el anuncio de marcas estables sin apuntar nada
+  // (se lee de la URL en el cliente: así la página no necesita un Suspense)
+  const [previewIntro, setPreviewIntro] = useState(false);
+  useEffect(() => {
+    setPreviewIntro(new URLSearchParams(window.location.search).get("preview-anuncio") === "1");
+  }, []);
+  // Cambios de estructura hechos en este entreno, para poder descartarlos
+  const journal = useWorkoutEditJournal(workout?.id);
+  const [undoing, setUndoing] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -53,22 +64,60 @@ export default function ActiveWorkoutPage() {
     return Promise.all([utils.workout.active.invalidate(), utils.workout.outliers.invalidate()]);
   };
   const updateSet = api.workout.updateSet.useMutation({ onSuccess: invalidate });
-  const addSet = api.workout.addSet.useMutation({ onSuccess: invalidate });
+  const addSet = api.workout.addSet.useMutation({
+    onSuccess: (set, vars) => {
+      journal.recordAddSet(set.id, vars.workoutExerciseId);
+      return invalidate();
+    },
+  });
   const removeSet = api.workout.removeSet.useMutation({ onSuccess: invalidate });
   const addExercise = api.workout.addExercise.useMutation({
-    onSuccess: () => {
+    onSuccess: (created) => {
+      journal.recordAddExercise(created.id);
       setAddOpen(false);
       invalidate();
     },
   });
+  const removeExercise = api.workoutEdit.removeExercise.useMutation();
+  const restoreSet = api.workoutEdit.restoreSet.useMutation();
+
+  /**
+   * Descartar cambios: deshace, de la última a la primera, las series y los
+   * ejercicios que se añadieron o quitaron en este entreno. Los pesos y las
+   * repeticiones anotados no se tocan: eso no es la estructura.
+   */
+  async function discardEdits() {
+    setUndoing(true);
+    try {
+      for (const op of [...journal.ops].reverse()) {
+        try {
+          if (op.type === "addSet") await removeSet.mutateAsync({ setId: op.setId });
+          else if (op.type === "addExercise") {
+            await removeExercise.mutateAsync({ workoutExerciseId: op.workoutExerciseId });
+          } else {
+            const { setId: _setId, ...snapshot } = op.snapshot;
+            await restoreSet.mutateAsync(snapshot);
+          }
+        } catch {
+          /* ya no existe (p. ej. se quitó desde otro dispositivo): se sigue con el resto */
+        }
+      }
+    } finally {
+      journal.clear();
+      await invalidate();
+      setUndoing(false);
+    }
+  }
   const cancel = api.workout.cancel.useMutation({
     onSuccess: () => {
+      journal.clear();
       utils.invalidate();
       router.push("/panel");
     },
   });
   const finish = api.workout.finish.useMutation({
     onSuccess: (res) => {
+      journal.clear();
       utils.invalidate();
       setFinishOpen(false);
       setResult(res.newPRs);
@@ -140,6 +189,7 @@ export default function ActiveWorkoutPage() {
           subtitle="Registra tu entrenamiento eligiendo una de tus rutinas"
         />
         <WorkoutLauncher />
+        {previewIntro && <StableIntroModal routineId={null} preview />}
       </div>
     );
   }
@@ -157,8 +207,26 @@ export default function ActiveWorkoutPage() {
   );
   const pct = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
 
+  // Resumen de los cambios de estructura pendientes de descartar
+  const addedSets = journal.ops.filter((o) => o.type === "addSet").length;
+  const addedExercises = journal.ops.filter((o) => o.type === "addExercise").length;
+  const removedSets = journal.ops.filter((o) => o.type === "removeSet").length;
+  const editSummary = [
+    addedExercises > 0 && `+${addedExercises} ${addedExercises === 1 ? "ejercicio" : "ejercicios"}`,
+    addedSets > 0 && `+${addedSets} ${addedSets === 1 ? "serie" : "series"}`,
+    removedSets > 0 && `−${removedSets} ${removedSets === 1 ? "serie" : "series"}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <div className="space-y-5">
+      {/* Anuncio de marcas estables: una vez por rutina, la primera vez que se entrena */}
+      <StableIntroModal
+        routineId={workout.routineId}
+        routineName={workout.routine?.name}
+        preview={previewIntro}
+      />
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">
@@ -222,6 +290,28 @@ export default function ActiveWorkoutPage() {
           <Lock className="h-3.5 w-3.5" /> Entreno bloqueado: no se añaden ni se quitan series ni
           ejercicios. Pesos y repeticiones se editan con normalidad.
         </p>
+      )}
+
+      {/* Cambios de estructura de este entreno: se pueden deshacer de golpe */}
+      {journal.ops.length > 0 && (
+        <Card className="flex items-center justify-between gap-3 border-amber-400/40 bg-amber-400/5 py-3">
+          <p className="text-sm">
+            Has cambiado la estructura del entreno <span className="text-muted">({editSummary})</span>.
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={undoing}
+            title="Deshace las series y ejercicios añadidos o quitados; los pesos y repeticiones no se tocan"
+            onClick={() => {
+              if (confirm("¿Descartar los cambios? Se deshacen las series y ejercicios añadidos o quitados; los pesos y repeticiones que hayas anotado se quedan.")) {
+                void discardEdits();
+              }
+            }}
+          >
+            <Undo2 className="h-3.5 w-3.5" /> Descartar cambios
+          </Button>
+        </Card>
       )}
 
       {workout.exercises.map((we) => {
@@ -296,7 +386,23 @@ export default function ActiveWorkoutPage() {
               </button>
               {!locked && (
                 <button
-                  onClick={() => removeSet.mutate({ setId: s.id })}
+                  onClick={() =>
+                    removeSet.mutate(
+                      { setId: s.id },
+                      {
+                        onSuccess: () =>
+                          journal.recordRemoveSet({
+                            setId: s.id,
+                            workoutExerciseId: we.id,
+                            setNumber: s.setNumber,
+                            reps: s.reps,
+                            weight: s.weight,
+                            completed: s.completed,
+                            touched: s.touched,
+                          }),
+                      },
+                    )
+                  }
                   disabled={we.sets.length <= 1}
                   title="Quitar esta serie"
                   aria-label="Quitar esta serie"

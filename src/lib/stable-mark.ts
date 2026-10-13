@@ -11,6 +11,11 @@
  *  - Si cuenta, la sesión valida el peso MÍNIMO de esas series: con al menos
  *    ese peso se hicieron 12 reps o más en todas.
  *
+ * Esto cubre las dos formas de lograrla:
+ *  1. Todas las series al mismo peso con 12 reps o más: el mínimo es ese peso.
+ *  2. Pesos distintos por serie (pirámide, drop set…) pero todas con 12 reps o
+ *     más: cuenta el menor de ellos, porque es el que se sostuvo en todas.
+ *
  * La marca es el mayor de esos pesos entre todas las sesiones. Se confirma
  * cuando se ha repetido en 2 sesiones o más. Si luego se logra un peso mayor,
  * la marca pasa a él con una sola sesión y vuelve a estar sin confirmar.

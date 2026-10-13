@@ -30,7 +30,13 @@ export type PushResult = {
 export async function sendPushToUsers(
   db: PrismaClient,
   userIds: string[],
-  payload: { title: string; body?: string; url?: string },
+  payload: {
+    title: string;
+    body?: string;
+    url?: string;
+    /** Con etiqueta, un aviso nuevo REEMPLAZA al anterior con la misma en el dispositivo. */
+    tag?: string;
+  },
 ): Promise<PushResult> {
   const result: PushResult = { delivered: 0, failed: 0, expired: 0 };
   if (userIds.length === 0 || !ensureConfigured()) return result;

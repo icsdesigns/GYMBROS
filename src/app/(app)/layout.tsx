@@ -13,6 +13,7 @@ import { AppSplash } from "@/components/app-splash";
 import { RestTimerProvider } from "@/components/rest-timer-provider";
 import { FloatingDock } from "@/components/floating-dock";
 import { PresencePing } from "@/components/presence-ping";
+import { WorkoutDeviceNotification } from "@/components/workout-device-notification";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerAuthSession();
@@ -37,6 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <OnboardingTutorial />
         <OfflineManager />
         <PresencePing />
+        <WorkoutDeviceNotification />
         <AppSplash />
         <BottomNav />
       </div>

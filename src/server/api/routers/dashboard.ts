@@ -9,6 +9,7 @@ import { reconcilePlan } from "@/server/services/plan-service";
 import { seasonAt } from "@/server/services/season";
 import { groupMemberIds } from "@/server/services/group";
 import { WORKOUT_BONUS_POINTS } from "@/server/services/gamification";
+import { computeStableMarks } from "@/lib/stable-mark";
 
 export const dashboardRouter = createTRPCRouter({
   summary: protectedProcedure.query(async ({ ctx }) => {
@@ -127,6 +128,47 @@ export const dashboardRouter = createTRPCRouter({
       },
       yearAttendances,
       monthlyAvgWorkouts,
+    };
+  }),
+
+  /**
+   * Resumen de marcas estables de las rutinas del usuario, para el cartel de
+   * Inicio: de todos los ejercicios CON PESO de sus rutinas (los de solo
+   * repeticiones no tienen marca, igual que en `workout.stableMarks`), cuántos
+   * tienen marca estable, cuántos la tienen verificada (la misma en 2 entrenos
+   * distintos) y cuántos aún necesitan verificarla.
+   */
+  stableMarksOverview: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const routineExercises = await ctx.db.routineExercise.findMany({
+      where: { routine: { userId }, exercise: { noWeight: false } },
+      select: { exerciseId: true },
+    });
+    const exerciseIds = Array.from(new Set(routineExercises.map((re) => re.exerciseId)));
+    if (exerciseIds.length === 0) return { total: 0, withMark: 0, verified: 0, pending: 0 };
+
+    // Mismo origen que workout.stableMarks, acotado a los ejercicios de las rutinas
+    const workouts = await ctx.db.workout.findMany({
+      where: { userId, endedAt: { not: null } },
+      select: {
+        startedAt: true,
+        exercises: {
+          where: { exerciseId: { in: exerciseIds }, exercise: { noWeight: false } },
+          select: {
+            exerciseId: true,
+            sets: { select: { reps: true, weight: true, completed: true } },
+          },
+        },
+      },
+    });
+    const marks = computeStableMarks(workouts);
+    const withMark = exerciseIds.filter((id) => marks[id]).length;
+    const verified = exerciseIds.filter((id) => marks[id]?.confirmed).length;
+    return {
+      total: exerciseIds.length,
+      withMark,
+      verified,
+      pending: exerciseIds.length - verified,
     };
   }),
 

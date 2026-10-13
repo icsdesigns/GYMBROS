@@ -100,6 +100,9 @@ self.addEventListener("push", (event) => {
       body: data.body || "",
       icon: "/icon-192.png",
       badge: "/badge-96.png",
+      // Con etiqueta (p. ej. el aviso de entreno parado) un aviso repetido
+      // sustituye al anterior en lugar de apilarse, y lo hace sin volver a sonar
+      ...(data.tag ? { tag: data.tag, renotify: false } : {}),
       data: { url: data.url || "/notificaciones" },
     }),
   );

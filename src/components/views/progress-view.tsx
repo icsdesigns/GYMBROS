@@ -25,6 +25,30 @@ const STYLES: Record<Direction, { card: string; text: string; icon: typeof Arrow
 };
 
 const nf = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
+/** Incremento junto al volumen: un decimal, con signo explícito (+3,2% / −1,5%). */
+const pctNf = new Intl.NumberFormat("es-ES", {
+  maximumFractionDigits: 1,
+  minimumFractionDigits: 1,
+  signDisplay: "exceptZero",
+});
+
+/** Incremento del volumen respecto a la sesión anterior: verde si sube, rojo si baja. */
+function DeltaPct({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  const rounded = Math.round(pct * 10) / 10;
+  return (
+    <span
+      title="Respecto a la sesión anterior"
+      className={cn(
+        "font-semibold",
+        rounded > 0 ? "text-emerald-500" : rounded < 0 ? "text-red-400" : "text-muted",
+      )}
+    >
+      {" "}
+      ({rounded === 0 ? "0%" : `${pctNf.format(rounded).replace("-", "−")}%`})
+    </span>
+  );
+}
 
 type RoutineTrend = inferRouterOutputs<AppRouter>["stats"]["routineTrends"][number];
 type ExerciseTrend = RoutineTrend["exercises"][number];
@@ -39,6 +63,7 @@ function TrendLabel({
   direction,
   changePct,
   volume,
+  volumeChangePct,
   unit,
   sessions,
   size = "md",
@@ -47,6 +72,8 @@ function TrendLabel({
   direction: Direction;
   changePct: number | null;
   volume: number | null;
+  /** Incremento del volumen de la última sesión respecto a la anterior (%). */
+  volumeChangePct: number | null;
   unit: "kg" | "reps";
   sessions: number;
   size?: "md" | "lg";
@@ -75,7 +102,14 @@ function TrendLabel({
             <Icon className={cn("shrink-0", size === "lg" ? "h-9 w-9" : "h-6 w-6")} strokeWidth={2.75} />
           </div>
           <p className={cn("mt-0.5 truncate text-muted", size === "lg" ? "text-xs" : "text-[10px]")}>
-            {volume === null ? "sin volumen" : `${nf.format(volume)} ${unit === "kg" ? "kg" : "reps"}`}
+            {volume === null ? (
+              "sin volumen"
+            ) : (
+              <>
+                {nf.format(volume)} {unit === "kg" ? "kg" : "reps"}
+                <DeltaPct pct={volumeChangePct} />
+              </>
+            )}
           </p>
         </>
       ) : (
@@ -170,6 +204,7 @@ export function ProgressView() {
             direction={overall.direction as Direction}
             changePct={overall.changePct}
             volume={overall.last}
+            volumeChangePct={overall.lastChangePct}
             unit={overall.unit}
             sessions={overall.sessions}
             size="lg"
@@ -184,6 +219,7 @@ export function ProgressView() {
                   direction={ex.direction as Direction}
                   changePct={ex.changePct}
                   volume={ex.last}
+                  volumeChangePct={ex.lastChangePct}
                   unit={ex.unit}
                   sessions={ex.sessions}
                 />
@@ -220,6 +256,11 @@ export function ProgressView() {
             label="Progreso"
             expression={`Δ% = (A − B) ÷ B × 100`}
             note={`A = media de las ${RECENT_SESSIONS} últimas sesiones · B = media de las ${PREVIOUS_SESSIONS} anteriores`}
+          />
+          <Formula
+            label="Incremento junto al volumen"
+            expression="(V₁ − V₀) ÷ V₀ × 100"
+            note="V₁ = volumen de la última sesión · V₀ = volumen de la sesión anterior. Verde si sube, rojo si baja."
           />
           <Formula
             label="Sesiones necesarias"

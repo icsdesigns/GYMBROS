@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hash } from "bcryptjs";
+import type { PrismaClient } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { startOfISOWeek, endOfISOWeek } from "date-fns";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/api/trpc";
@@ -21,6 +22,40 @@ import {
   resetRequestsExceeded,
   resetTokenIsValid,
 } from "@/server/services/password-reset";
+
+/**
+ * Dos personas no pueden llamarse igual: en el ranking, el feed y los avisos
+ * solo se ve el nombre. La comparación ignora mayúsculas y los
+ * espacios de más (también los del medio). No hay restricción única en el
+ * esquema, así que la garantía vive aquí; `exceptUserId` deja al propio
+ * usuario conservar su nombre al guardar el perfil.
+ */
+export async function assertNameAvailable(
+  db: PrismaClient,
+  name: string,
+  exceptUserId?: string,
+): Promise<void> {
+  const wanted = normalizeName(name);
+  if (wanted.length < 2) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "El nombre debe tener al menos 2 letras" });
+  }
+  // La comparación se hace en memoria (JS pliega bien las mayúsculas con
+  // acentos, cosa que depende de la configuración regional en la base de
+  // datos); es una lista corta de nombres y solo se consulta al registrarse o
+  // al cambiar de nombre.
+  const others = await db.user.findMany({
+    where: exceptUserId ? { id: { not: exceptUserId } } : {},
+    select: { name: true },
+  });
+  if (others.some((c) => normalizeName(c.name) === wanted)) {
+    throw new TRPCError({ code: "CONFLICT", message: "Ya hay alguien con ese nombre. Elige otro." });
+  }
+}
+
+/** Minúsculas, sin espacios extremos y con un solo espacio entre palabras. */
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
 
 export const userRouter = createTRPCRouter({
   /**
@@ -56,6 +91,7 @@ export const userRouter = createTRPCRouter({
       if (existing) {
         throw new TRPCError({ code: "CONFLICT", message: "Ya existe una cuenta con ese email" });
       }
+      await assertNameAvailable(ctx.db, input.name);
       const isFirst = (await ctx.db.user.count()) === 0;
       const user = await ctx.db.user.create({
         data: {
@@ -114,9 +150,23 @@ export const userRouter = createTRPCRouter({
         notifyPrefs: z.record(z.boolean()).optional(),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      ctx.db.user.update({ where: { id: ctx.session.user.id }, data: input }),
-    ),
+    .mutation(async ({ ctx, input }) => {
+      // Un nombre ya en uso por otra persona se rechaza (el propio no cuenta).
+      // Ajustes manda el nombre en cada guardado: si no ha cambiado no se
+      // comprueba, para que un duplicado heredado no impida guardar lo demás.
+      const data = { ...input };
+      if (input.name !== undefined) {
+        data.name = input.name.trim();
+        const current = await ctx.db.user.findUniqueOrThrow({
+          where: { id: ctx.session.user.id },
+          select: { name: true },
+        });
+        if (normalizeName(current.name) !== normalizeName(data.name)) {
+          await assertNameAvailable(ctx.db, data.name, ctx.session.user.id);
+        }
+      }
+      return ctx.db.user.update({ where: { id: ctx.session.user.id }, data });
+    }),
 
   /** Gimnasio de referencia del apartado Gym: solo el nombre. */
   setGym: protectedProcedure
@@ -129,12 +179,18 @@ export const userRouter = createTRPCRouter({
       }),
     ),
 
-  /** Latido de la app abierta: sirve para saber si un entreno activo se olvidó. */
+  /**
+   * Latido de la app abierta (última vez que se la vio).
+   *
+   * Con un entreno en curso NO se anota: ahí `lastSeenAt` pasa a significar
+   * «última vez que se tocaron series» (lo mueve `touchWorkoutActivity`), que
+   * es lo que mira el aviso de entreno parado. Si el latido también la moviera,
+   * tener la app abierta sin apuntar nada evitaría el aviso. Una sola consulta.
+   */
   ping: protectedProcedure.mutation(async ({ ctx }) => {
-    await ctx.db.user.update({
-      where: { id: ctx.session.user.id },
+    await ctx.db.user.updateMany({
+      where: { id: ctx.session.user.id, workouts: { none: { endedAt: null } } },
       data: { lastSeenAt: new Date() },
-      select: { id: true },
     });
     return { ok: true };
   }),

@@ -3,6 +3,7 @@ import { userRouter } from "@/server/api/routers/user";
 import { exerciseRouter } from "@/server/api/routers/exercise";
 import { routineRouter } from "@/server/api/routers/routine";
 import { workoutRouter } from "@/server/api/routers/workout";
+import { workoutEditRouter } from "@/server/api/routers/workout-edit";
 import { attendanceRouter } from "@/server/api/routers/attendance";
 import { prRouter } from "@/server/api/routers/pr";
 import { metricsRouter } from "@/server/api/routers/metrics";
@@ -26,6 +27,7 @@ export const appRouter = createTRPCRouter({
   exercise: exerciseRouter,
   routine: routineRouter,
   workout: workoutRouter,
+  workoutEdit: workoutEditRouter,
   attendance: attendanceRouter,
   pr: prRouter,
   metrics: metricsRouter,

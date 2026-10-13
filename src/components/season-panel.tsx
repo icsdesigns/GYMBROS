@@ -1,12 +1,45 @@
 "use client";
 
 import Link from "next/link";
+import { addDays, format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Trophy, ChevronRight, Swords } from "lucide-react";
+
+/**
+ * Periodo de una temporada en formato compacto: "15 ago – 14 nov · quedan 33 días".
+ *
+ * `to` es el límite exclusivo de la temporada (el día en que ya empieza la
+ * siguiente), así que el último día que cuenta es el anterior. Los días son los
+ * que quedan contando hoy, igual que `daysLeft` del servidor. Si la temporada
+ * cruza de año, el año va en las dos fechas para que no haya dudas.
+ *
+ * Antes de empezar, "empieza el 15 ago · faltan 33 días" (`daysLeft` ya cuenta
+ * los días que faltan para el arranque).
+ */
+export function seasonPeriodLabel(season: {
+  started: boolean;
+  from: Date;
+  to: Date;
+  daysLeft: number;
+}): string {
+  const last = addDays(season.to, -1);
+  const crossesYear = season.from.getFullYear() !== last.getFullYear();
+  const fmt = (d: Date) => format(d, crossesYear ? "d MMM yyyy" : "d MMM", { locale: es });
+  const days = `${season.daysLeft} ${season.daysLeft === 1 ? "día" : "días"}`;
+  if (!season.started) {
+    return `empieza el ${fmt(season.from)} · ${season.daysLeft === 1 ? "falta" : "faltan"} ${days}`;
+  }
+  const left = season.daysLeft === 1 ? `queda ${days}` : `quedan ${days}`;
+  return `${fmt(season.from)} – ${fmt(last)} · ${left}`;
+}
 
 type Season = {
   index: number;
   started: boolean;
   daysLeft: number;
+  /** Primer día de la temporada y límite exclusivo del final. */
+  from: Date;
+  to: Date;
   myPoints: number;
   /** Puesto en la clasificación de la temporada; null si aún no puntuó. */
   position: number | null;
@@ -65,6 +98,9 @@ export function SeasonPanel({ season }: { season: Season }) {
               </p>
               <p className="truncate text-base font-extrabold leading-tight text-amber-100">
                 {started ? `Temporada ${season.index}` : "Temporada 1"}
+              </p>
+              <p className="truncate text-[11px] leading-tight text-amber-100/70">
+                {seasonPeriodLabel(season)}
               </p>
             </div>
           </div>

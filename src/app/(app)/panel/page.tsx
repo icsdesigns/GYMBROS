@@ -11,12 +11,15 @@ import { PointsBreakdown } from "@/components/points-breakdown";
 import { PointsInfo } from "@/components/points-info";
 import { StreakProgress } from "@/components/streak-progress";
 import { SeasonPanel } from "@/components/season-panel";
+import { StableMarksPanel } from "@/components/stable-marks-panel";
 import { YearSummary } from "@/components/year-summary";
 import { WorkoutLauncher } from "@/components/workout-launcher";
 
 
 export default function DashboardPage() {
   const { data, isLoading } = api.dashboard.summary.useQuery();
+  // Secundario: si tarda o falla, el resto de Inicio se pinta igual
+  const { data: marksOverview } = api.dashboard.stableMarksOverview.useQuery();
 
   if (isLoading || !data) return <Spinner />;
 
@@ -56,6 +59,9 @@ export default function DashboardPage() {
         <SeasonPanel season={data.season} />
         <StreakProgress streak={data.user.currentStreak} rules={data.streakRules} />
       </div>
+
+      {/* Marcas estables por verificar: solo mientras falte alguna */}
+      {marksOverview && <StableMarksPanel overview={marksOverview} />}
 
       {/* Constancia del último año */}
       <YearSummary workouts={data.yearAttendances} monthlyAvg={data.monthlyAvgWorkouts} />

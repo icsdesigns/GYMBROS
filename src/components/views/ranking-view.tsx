@@ -9,6 +9,7 @@ import { api } from "@/trpc/react";
 import { Card, Spinner, Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { LEVEL_STYLES } from "@/lib/progress";
+import { seasonPeriodLabel } from "@/components/season-panel";
 
 const PERIODS = [
   { key: "week", label: "Semana" },
@@ -89,6 +90,7 @@ export function RankingView() {
                 <>
                   <div>
                     <p className="font-semibold">🏆 Temporada {data.season.index}</p>
+                    <p className="text-xs font-medium text-gold">{seasonPeriodLabel(data.season)}</p>
                     <p className="text-xs text-muted">Al campeón le espera el título de la temporada.</p>
                   </div>
                   <div className="text-right">
@@ -100,7 +102,7 @@ export function RankingView() {
                 <>
                   <div>
                     <p className="font-semibold">La temporada 1 aún no ha empezado</p>
-                    <p className="text-xs text-muted">Arranca el 15 de agosto de 2026.</p>
+                    <p className="text-xs font-medium text-gold">{seasonPeriodLabel(data.season)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-gold">{data.season.daysLeft}</p>

@@ -47,6 +47,14 @@ export type AppUpdate = {
 /** De la más reciente a la más antigua. */
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: "v4.3-marca-estable",
+    date: "2026-10-13",
+    emoji: "🎯",
+    title: "Nueva: tu mejor marca estable",
+    description:
+      "Es el peso que de verdad dominas en cada ejercicio, y sirve para medir tu progreso real.\n\n✅ Se consigue de 2 formas: todas las series al mismo peso con 12 reps o más, o con pesos distintos y todas a 12 reps o más (en ese caso cuenta el menor).\n\n🔒 Se verifica cuando la repites en 2 entrenos distintos.\n\nMira las tuyas en Inicio y en Entrenamiento › Récords. ¿A qué esperas para fijar la tuya? 💪",
+  },
+  {
     id: "v4.2-semaforo-progreso",
     date: "2026-10-02",
     emoji: "🚦",

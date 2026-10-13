@@ -4,6 +4,7 @@ import {
 } from "./gamification";
 import { registerAttendance } from "./attendance-service";
 import { startOfISOWeek } from "date-fns";
+import { WORKOUT_IDLE_MS, WORKOUT_REMINDER_TAG } from "@/lib/workout-notification";
 
 /** Tiempo máximo de una sesión: si se supera, se cierra sola. */
 export const MAX_WORKOUT_MS = 3 * 60 * 60 * 1000; // 3 horas
@@ -354,9 +355,19 @@ export async function autoCloseStaleWorkouts(db: PrismaClient, userId: string): 
   return stale.length;
 }
 
+/** Ventana en la que se buscan entrenos solapados ya avisados (la duración máxima). */
+const START_NOTICE_COOLDOWN_MS = MAX_WORKOUT_MS;
+
 /**
  * Avisa al grupo cuando un entreno lleva más de 20 minutos activo (una sola vez).
  * Se dispara desde la consulta del entreno activo del propio usuario.
+ *
+ * Esa consulta se lanza a la vez desde varios sitios (pantalla del entreno,
+ * lanzador, otra pestaña u otro dispositivo, reintentos de red) y en servidor
+ * cada llamada corre en paralelo. Con «leer la marca y luego escribirla» todas
+ * veían `startNotified = false` antes de que ninguna la subiera y el grupo
+ * recibía el aviso repetido en el mismo segundo. Ahora la marca se RECLAMA con
+ * un `updateMany` condicionado: la base de datos solo deja pasar a una.
  */
 export async function notifyWorkoutStartedIfDue(db: PrismaClient, userId: string): Promise<void> {
   const workout = await db.workout.findFirst({
@@ -364,7 +375,31 @@ export async function notifyWorkoutStartedIfDue(db: PrismaClient, userId: string
     include: { routine: { select: { name: true, emoji: true } } },
   });
   if (!workout) return;
-  await db.workout.update({ where: { id: workout.id }, data: { startNotified: true } });
+
+  // Reclamo atómico: solo la llamada que cambia false -> true sigue adelante
+  const claimed = await db.workout.updateMany({
+    where: { id: workout.id, startNotified: false },
+    data: { startNotified: true },
+  });
+  if (claimed.count === 0) return;
+
+  // Dos entrenos abiertos a la vez (p. ej. un doble toque en «Empezar» que
+  // llegó a crear dos) no deben avisar dos veces: si ya se avisó de otro que
+  // seguía abierto cuando empezó este, se calla. Una segunda sesión empezada
+  // después de terminar la anterior sí avisa: es un entreno de verdad.
+  // (Un entreno cancelado se BORRA, así que aquí no deja rastro.)
+  const overlapping = await db.workout.findFirst({
+    where: {
+      userId,
+      id: { not: workout.id },
+      startNotified: true,
+      startedAt: { gt: new Date(workout.startedAt.getTime() - START_NOTICE_COOLDOWN_MS) },
+      OR: [{ endedAt: null }, { endedAt: { gt: workout.startedAt } }],
+    },
+    select: { id: true },
+  });
+  if (overlapping) return;
+
   const [user, weekNumber] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } }),
     // Qué entreno de la semana es este: los empezados desde el lunes, él incluido
@@ -385,14 +420,22 @@ function weekOrdinal(n: number): string {
   return n === 1 || n === 3 ? `${n}er` : `${n}º`;
 }
 
-/** Tiempo sin abrir la app con un entreno en marcha antes de avisar. */
-export const IDLE_WORKOUT_MS = 30 * 60 * 1000; // 30 minutos
+/** Tiempo sin tocar pesos ni repeticiones, con un entreno en marcha, antes de avisar. */
+export const IDLE_WORKOUT_MS = WORKOUT_IDLE_MS; // 15 minutos
 
 /**
- * Avisa a quien tiene un entreno activo y lleva más de 30 minutos sin abrir la
- * app (probablemente se le olvidó darle a Finalizar, o se le fue la cabeza con
- * el móvil guardado). Un aviso por cada ausencia: si vuelve a la app y se
- * vuelve a ir, puede recibir otro.
+ * Avisa a quien tiene un entreno activo y lleva 15 minutos sin actualizar
+ * pesos ni repeticiones (se le olvidó apuntar, o darle a Finalizar).
+ *
+ * La «última actividad» sale de `User.lastSeenAt` SIN tocar el esquema: mientras
+ * hay un entreno en curso el latido de la app (`user.ping`) NO la mueve, solo
+ * la mueven los cambios en las series (`touchWorkoutActivity`). Así, estar con
+ * la app abierta mirando no cuenta como actividad; apuntar sí. Si nunca se ha
+ * tocado nada, vale el inicio del entreno.
+ *
+ * Un aviso por cada parón: no se vuelve a avisar hasta que se anota algo y se
+ * hace otro parón (`idleNotifiedAt` >= última actividad). Debe llamarse cada
+ * pocos minutos desde un programador externo (/api/cron/idle-workouts).
  */
 export async function notifyIdleWorkouts(db: PrismaClient, now: Date = new Date()): Promise<number> {
   const idleSince = new Date(now.getTime() - IDLE_WORKOUT_MS);
@@ -417,22 +460,40 @@ export async function notifyIdleWorkouts(db: PrismaClient, now: Date = new Date(
   const { sendPushToUsers } = await import("./push");
   let sent = 0;
   for (const w of workouts) {
-    // Última señal de vida: el latido de la app o, si no hay, el inicio del entreno
-    const lastSeen = [w.user.lastSeenAt, w.startedAt]
+    // Última actividad: el último cambio en las series o, si no hay, el inicio
+    const lastActivity = [w.user.lastSeenAt, w.startedAt]
       .filter((d): d is Date => Boolean(d))
       .reduce((a, b) => (a > b ? a : b));
-    if (lastSeen > idleSince) continue;
-    // Ya se avisó de esta ausencia (no ha vuelto a abrir la app desde entonces)
-    if (w.idleNotifiedAt && w.idleNotifiedAt >= lastSeen) continue;
+    if (lastActivity > idleSince) continue;
+    // Ya se avisó de este parón (no se ha anotado nada desde entonces)
+    if (w.idleNotifiedAt && w.idleNotifiedAt >= lastActivity) continue;
 
-    await db.workout.update({ where: { id: w.id }, data: { idleNotifiedAt: now } });
+    // Reclamo atómico: si dos ejecuciones del cron se solapan, avisa solo una
+    const claimed = await db.workout.updateMany({
+      where: {
+        id: w.id,
+        endedAt: null,
+        OR: [{ idleNotifiedAt: null }, { idleNotifiedAt: { lt: lastActivity } }],
+      },
+      data: { idleNotifiedAt: now },
+    });
+    if (claimed.count === 0) continue;
     if (!categoryEnabled(w.user.notifyPrefs, "reminders")) continue;
 
-    const title = "Tienes un entreno en marcha ⏱️";
-    const body = `${w.routine ? `${w.routine.emoji} ${w.routine.name} sigue abierto` : "Tu entreno sigue abierto"} y llevas más de 30 minutos sin entrar. Entra para seguir apuntando o darle a Finalizar.`;
+    const title = "¿Sigues entrenando? ⏱️";
+    const body = `${w.routine ? `${w.routine.emoji} ${w.routine.name}` : "Tu entreno"} lleva 15 minutos sin cambios. Entra para seguir apuntando o darle a Finalizar.`;
     await db.notification.create({ data: { userId: w.userId, type: "SYSTEM", title, body } });
-    await sendPushToUsers(db, [w.userId], { title, body, url: "/entrenar" });
+    await sendPushToUsers(db, [w.userId], { title, body, url: "/entrenar", tag: WORKOUT_REMINDER_TAG });
     sent++;
   }
   return sent;
+}
+
+/**
+ * Anota que el usuario acaba de tocar su entreno en curso (series, ejercicios).
+ * Es la señal que usa `notifyIdleWorkouts`; ver ahí por qué reutiliza
+ * `lastSeenAt`. Una sola escritura barata por cambio.
+ */
+export async function touchWorkoutActivity(db: PrismaClient, userId: string): Promise<void> {
+  await db.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() }, select: { id: true } });
 }
