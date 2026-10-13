@@ -8,7 +8,7 @@ import type { PrismaClient } from "@prisma/client";
  * que no pasan por ningún filtro de preferencias.
  */
 export const NOTIFY_CATEGORIES = [
-  "prs", "workouts", "streaks", "reminders", "system",
+  "prs", "workouts", "streaks", "reminders", "system", "chat",
 ] as const;
 export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number];
 
@@ -18,6 +18,7 @@ export const CATEGORY_LABELS: Record<NotifyCategory, string> = {
   streaks: "Rachas y semanas",
   reminders: "Recordatorios de entreno",
   system: "Sistema y logros",
+  chat: "Mensajes del chat",
 };
 
 /** Por defecto todas están activas: solo se desactiva si el usuario lo pone en false. */

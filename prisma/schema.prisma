@@ -145,6 +145,9 @@ model GroupMember {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     GroupRole @default(MEMBER)
   joinedAt DateTime  @default(now())
+  /// Hasta cuándo ha leído este miembro el chat de ESTE grupo (el chat es por
+  /// grupo y un usuario puede estar en varios).
+  lastChatReadAt DateTime?
 
   @@unique([groupId, userId])
   @@index([userId])
@@ -549,10 +552,13 @@ model PlanSlot {
 
 model ChatMessage {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Null en los mensajes de sistema (p. ej. el anuncio de rachas de los lunes).
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   text      String
   createdAt DateTime @default(now())
+  /// Mensaje generado por la app, no escrito por un miembro.
+  system    Boolean  @default(false)
 
   // Nullable solo por los mensajes anteriores a los grupos: el script
   // prisma/backfill-groups.ts los asigna al grupo original.

@@ -30,16 +30,25 @@ export async function notifyCommunityStreaks(db: PrismaClient, now: Date = new D
       currentStreak: { gte: 1 },
       lastCompletedWeek: { gte: lastWeek, lt: weekStart },
     },
-    select: { id: true, name: true, memberships: { select: { groupId: true } } },
+    select: {
+      id: true,
+      name: true,
+      currentStreak: true,
+      memberships: { select: { groupId: true } },
+    },
     orderBy: { currentStreak: "desc" },
   });
-  if (achievers.length === 0) return { recipients: 0, achievers: 0 };
+  if (achievers.length === 0) return { recipients: 0, achievers: 0, announced: 0 };
 
   const achieverGroups = achievers.map((a) => ({
     name: a.name,
+    streak: a.currentStreak,
     groups: new Set(a.memberships.map((m) => m.groupId)),
   }));
   const groupIds = Array.from(new Set(achievers.flatMap((a) => a.memberships.map((m) => m.groupId))));
+
+  // Anuncio en el chat de cada grupo (no depende de quién tenga activas las notificaciones)
+  const announced = await announceInGroupChats(db, groupIds, achieverGroups, weekStart);
 
   const members = await db.groupMember.findMany({
     where: { groupId: { in: groupIds }, user: { deletionRequestedAt: null } },
@@ -74,5 +83,48 @@ export async function notifyCommunityStreaks(db: PrismaClient, now: Date = new D
     await sendPushToUsers(db, [userId], { title: COMMUNITY_STREAKS_TITLE, body, url: "/ranking" });
     sent++;
   }
-  return { recipients: sent, achievers: achievers.length };
+  return { recipients: sent, achievers: achievers.length, announced };
+}
+
+/** "1 semana" / "3 semanas" */
+function weeksLabel(n: number): string {
+  return `${n} ${n === 1 ? "semana" : "semanas"}`;
+}
+
+/**
+ * Deja un mensaje de sistema en el chat de cada grupo con algún miembro que
+ * cumplió la semana pasada: «Ana (3 semanas), Luis y Marta (1 semana)».
+ * No manda push de chat. Si el cron se repite no duplica el mensaje.
+ */
+async function announceInGroupChats(
+  db: PrismaClient,
+  groupIds: string[],
+  achievers: { name: string; streak: number; groups: Set<string> }[],
+  weekStart: Date,
+): Promise<number> {
+  const already = await db.chatMessage.findMany({
+    where: { groupId: { in: groupIds }, system: true, createdAt: { gte: weekStart } },
+    select: { groupId: true },
+  });
+  const done = new Set(already.map((m) => m.groupId));
+
+  let announced = 0;
+  for (const groupId of groupIds) {
+    if (done.has(groupId)) continue;
+    // Ya vienen ordenados por racha descendente; se agrupan los que comparten racha
+    const mine = achievers.filter((a) => a.groups.has(groupId));
+    if (mine.length === 0) continue;
+    const byStreak = new Map<number, string[]>();
+    for (const a of mine) {
+      if (!byStreak.has(a.streak)) byStreak.set(a.streak, []);
+      byStreak.get(a.streak)!.push(a.name);
+    }
+    const parts = Array.from(byStreak.entries()).map(
+      ([streak, names]) => `${joinNames(names)} (${weeksLabel(streak)})`,
+    );
+    const text = `🔥 Rachas de la semana: ¡${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}` : parts[0]} ${mine.length === 1 ? "ha cumplido" : "han cumplido"}!`;
+    await db.chatMessage.create({ data: { groupId, text, system: true, userId: null } });
+    announced++;
+  }
+  return announced;
 }

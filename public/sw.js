@@ -101,8 +101,9 @@ self.addEventListener("push", (event) => {
       icon: "/icon-192.png",
       badge: "/badge-96.png",
       // Con etiqueta (p. ej. el aviso de entreno parado) un aviso repetido
-      // sustituye al anterior en lugar de apilarse, y lo hace sin volver a sonar
-      ...(data.tag ? { tag: data.tag, renotify: false } : {}),
+      // sustituye al anterior en lugar de apilarse, y lo hace sin volver a sonar.
+      // Los del chat (chat-<grupo>) sí vuelven a avisar con cada mensaje nuevo
+      ...(data.tag ? { tag: data.tag, renotify: String(data.tag).startsWith("chat-") } : {}),
       data: { url: data.url || "/notificaciones" },
     }),
   );
