@@ -87,6 +87,27 @@ export function StableMarkBadge({
   );
 }
 
+/**
+ * Estado de una marca estable como etiqueta fija (sin pulsar): «Verificada» en
+ * sky o «Sin verificar» discreta. Para tarjetas donde el estado va a la vista.
+ */
+export function StableMarkStatus({ mark, className }: { mark: StableMark; className?: string }) {
+  const Icon = mark.confirmed ? ShieldCheck : Anchor;
+  return (
+    <span
+      title={markLabel(mark)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+        mark.confirmed ? STYLES.confirmed : STYLES.pending,
+        className,
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden />
+      {mark.confirmed ? "Verificada" : "Sin verificar"}
+    </span>
+  );
+}
+
 const SAMPLE: StableMark = {
   weight: 40,
   sessions: 1,

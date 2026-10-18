@@ -66,6 +66,32 @@ body {
   .gb-modal-panel { animation: none; }
 }
 
+/* Entrada escalonada de listas (p. ej. Récords): cada elemento sube y aparece
+   con un retardo de --gb-i × 45 ms; el índice lo limita quien lo pone, así que
+   el total nunca crece con el número de elementos. Solo transform y opacity.
+   El valor destacado (.gb-pop) llega un poco después con un leve zoom. */
+.gb-rise {
+  animation: gb-rise 0.3s ease-out both;
+  animation-delay: calc(var(--gb-i, 0) * 45ms);
+}
+.gb-pop {
+  display: inline-block;
+  animation: gb-pop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--gb-i, 0) * 45ms + 120ms);
+}
+@keyframes gb-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gb-pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gb-rise,
+  .gb-pop { animation: none; }
+}
+
 /* Aviso de despedida tras la ventana de novedades: entra rápido y se
    desvanece a lo largo de 3 s sin que haya que cerrarlo. */
 .gb-farewell {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { computeStableMarks, type StableMark } from "@/lib/stable-mark";
 import { awardPoints, addFeed, checkAchievements } from "@/server/services/gamification";
 
 export const prRouter = createTRPCRouter({
@@ -76,14 +77,16 @@ export const prRouter = createTRPCRouter({
   }),
 
   /**
-   * Mejores marcas agrupadas por rutina: para cada ejercicio de cada rutina, su
-   * récord (peso × reps y fecha). Los ejercicios sin ninguna marca no aparecen,
-   * y las marcas de ejercicios que ya no están en ninguna rutina se recogen en
-   * un último grupo para que no se pierdan de vista.
+   * Marcas agrupadas por rutina: para cada ejercicio de cada rutina, su PR
+   * (peso, reps de esa serie y fecha) y su mejor marca estable (ver
+   * lib/stable-mark). Aparecen los ejercicios que tengan al menos una de las
+   * dos cosas; los que no tienen ninguna se omiten. Los ejercicios con PR que
+   * ya no están en ninguna rutina se recogen en un último grupo para que no se
+   * pierdan de vista. Los ejercicios sin peso solo tienen PR (en repeticiones).
    */
   byRoutine: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const [routines, prs] = await Promise.all([
+    const [routines, prs, workouts] = await Promise.all([
       ctx.db.routine.findMany({
         where: { userId },
         orderBy: [{ order: "asc" }, { createdAt: "asc" }],
@@ -99,43 +102,70 @@ export const prRouter = createTRPCRouter({
         where: { userId },
         include: { exercise: { select: { id: true, name: true, noWeight: true } } },
       }),
+      // Mismo origen que workout.stableMarks: entrenos terminados, solo ejercicios con peso
+      ctx.db.workout.findMany({
+        where: { userId, endedAt: { not: null } },
+        select: {
+          startedAt: true,
+          exercises: {
+            where: { exercise: { noWeight: false } },
+            select: {
+              exerciseId: true,
+              sets: { select: { reps: true, weight: true, completed: true } },
+            },
+          },
+        },
+      }),
     ]);
+    const marks = computeStableMarks(workouts);
 
-    // Mejor marca por ejercicio: el peso manda, salvo en los ejercicios sin
-    // peso, donde el récord son las repeticiones de una serie.
-    type Record = { exerciseId: string; name: string; noWeight: boolean; weight: number; reps: number; date: Date };
-    const best = new Map<string, Record>();
+    // PR por ejercicio: el peso manda, salvo en los ejercicios sin peso, donde
+    // el récord son las repeticiones de una serie.
+    type Pr = { weight: number; reps: number; date: Date };
+    const prInfo = new Map<string, { name: string; noWeight: boolean; pr: Pr }>();
     for (const pr of prs) {
-      const current = best.get(pr.exerciseId);
+      const current = prInfo.get(pr.exerciseId)?.pr;
       const better = !current
         ? true
         : pr.exercise.noWeight
           ? pr.reps > current.reps
           : pr.weight > current.weight || (pr.weight === current.weight && pr.reps > current.reps);
       if (better) {
-        best.set(pr.exerciseId, {
-          exerciseId: pr.exerciseId,
+        prInfo.set(pr.exerciseId, {
           name: pr.exercise.name,
           noWeight: pr.exercise.noWeight,
-          weight: pr.weight,
-          reps: pr.reps,
-          date: pr.date,
+          pr: { weight: pr.weight, reps: pr.reps, date: pr.date },
         });
       }
     }
+
+    type Entry = {
+      exerciseId: string;
+      name: string;
+      noWeight: boolean;
+      pr: Pr | null;
+      mark: StableMark | null;
+    };
+    const entryFor = (ex: { id: string; name: string; noWeight: boolean }): Entry | null => {
+      const pr = prInfo.get(ex.id)?.pr ?? null;
+      const mark = ex.noWeight ? null : (marks[ex.id] ?? null);
+      if (!pr && !mark) return null;
+      return { exerciseId: ex.id, name: ex.name, noWeight: ex.noWeight, pr, mark };
+    };
 
     const grouped = new Set<string>();
     const groups = routines
       .map((r) => {
         const records = r.exercises
-          .map((re) => best.get(re.exercise.id))
-          .filter((x): x is Record => x !== undefined);
+          .map((re) => entryFor(re.exercise))
+          .filter((x): x is Entry => x !== null);
         records.forEach((x) => grouped.add(x.exerciseId));
         return { id: r.id, name: r.name, emoji: r.emoji, color: r.color, records };
       })
       .filter((g) => g.records.length > 0);
 
-    const orphans = Array.from(best.values()).filter((x) => !grouped.has(x.exerciseId));
+    const orphans = Array.from(prInfo, ([id, info]) => entryFor({ id, name: info.name, noWeight: info.noWeight }))
+      .filter((x): x is Entry => x !== null && !grouped.has(x.exerciseId));
     if (orphans.length > 0) {
       groups.push({
         id: "otros",

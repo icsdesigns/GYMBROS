@@ -28,7 +28,10 @@ export function WorkoutHistoryView() {
   // Sesión sobre la que se está abriendo una incidencia
   const [incident, setIncident] = useState<string | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
-  const { data: workouts, isLoading } = api.workout.history.useQuery({ limit: 30 });
+  // Plegado por defecto; solo se recuerda mientras la pantalla está montada
+  const [open, setOpen] = useState(false);
+  // Mientras está plegado no se pide el historial (con datos ya cargados, plegar no los descarta)
+  const { data: workouts, isLoading } = api.workout.history.useQuery({ limit: 30 }, { enabled: open });
   const { data: day, isFetching: dayLoading } = api.attendance.day.useQuery(
     { date: dayDetail ?? new Date() },
     { enabled: dayDetail !== null },
@@ -49,7 +52,23 @@ export function WorkoutHistoryView() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl font-bold">Historial de entrenamientos</h2>
+        {/* El botón de info es hermano (no hijo) del que pliega: no se anidan botones.
+            El botón va dentro del título (y no al revés): un h2 no puede ir dentro de un botón */}
+        <h2 className="min-w-0 flex-1 text-xl font-bold">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls="workout-history-list"
+            className="flex w-full items-center gap-2 text-left"
+          >
+            <span className="truncate">Historial de entrenamientos</span>
+            <ChevronDown
+              aria-hidden
+              className={cn("h-5 w-5 shrink-0 text-muted transition-transform", open && "rotate-180")}
+            />
+          </button>
+        </h2>
         <button
           onClick={() => setLegendOpen(true)}
           aria-label="Qué significan los colores de las series"
@@ -60,104 +79,106 @@ export function WorkoutHistoryView() {
         </button>
       </div>
 
-      {isLoading ? (
-        <Spinner />
-      ) : workouts?.length === 0 ? (
-        <EmptyState
-          icon="📖"
-          title="Aún no hay entrenamientos"
-          subtitle="Cuando termines tu primera sesión aparecerá aquí"
-        />
-      ) : (
-        workouts?.map((w) => (
-          <details key={w.id} className="group rounded-2xl border border-border bg-surface">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
-              <div className="min-w-0">
-                <p className="truncate font-medium">
-                  {w.routine ? `${w.routine.emoji} ${w.routine.name}` : "Entrenamiento libre"}
-                </p>
-                <p className="text-xs capitalize text-muted">
-                  {format(w.startedAt, "EEEE d MMM yyyy", { locale: es })}
-                  {w.endedAt ? ` · ${differenceInMinutes(w.endedAt, w.startedAt)} min` : ""}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {w.incidents.length > 0 && (
-                  <Badge className="text-gold" title="Sesión corregida por incidencia">
-                    <Wrench className="h-3 w-3" /> corregida
-                  </Badge>
-                )}
-                <Badge>{formatKg(w.totalVolume)}</Badge>
-                <Badge>{w.totalSets} series</Badge>
-                <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
-              </div>
-            </summary>
-            <div className="space-y-3 border-t border-border p-4 pt-3">
-              {w.exercises.map((we) => (
-                  <div key={we.id}>
-                    <p className="mb-1 text-sm font-medium">{we.exercise.name}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {we.sets.map((s) => {
-                        const level = we.exercise.noWeight || !s.completed ? null : repsLevel(s.reps);
-                        return (
-                          <span
-                            key={s.id}
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs",
-                              !s.completed
-                                ? "bg-surface-2 text-muted line-through"
-                                : level
-                                  ? cn(LEVEL_STYLES[level].chip, "ring-1 ring-inset", LEVEL_STYLES[level].ring)
-                                  : "bg-accent/15 text-accent",
-                            )}
-                          >
-                            {!we.exercise.noWeight && s.weight > 0 ? `${s.weight} kg × ` : ""}
-                            {s.reps}
-                            {s.completed && <Check className="h-3 w-3" />}
-                          </span>
-                        );
-                      })}
+      <div id="workout-history-list" hidden={!open} className="space-y-3">
+        {!open ? null : isLoading ? (
+          <Spinner />
+        ) : workouts?.length === 0 ? (
+          <EmptyState
+            icon="📖"
+            title="Aún no hay entrenamientos"
+            subtitle="Cuando termines tu primera sesión aparecerá aquí"
+          />
+        ) : (
+          workouts?.map((w) => (
+            <details key={w.id} className="group rounded-2xl border border-border bg-surface">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {w.routine ? `${w.routine.emoji} ${w.routine.name}` : "Entrenamiento libre"}
+                  </p>
+                  <p className="text-xs capitalize text-muted">
+                    {format(w.startedAt, "EEEE d MMM yyyy", { locale: es })}
+                    {w.endedAt ? ` · ${differenceInMinutes(w.endedAt, w.startedAt)} min` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {w.incidents.length > 0 && (
+                    <Badge className="text-gold" title="Sesión corregida por incidencia">
+                      <Wrench className="h-3 w-3" /> corregida
+                    </Badge>
+                  )}
+                  <Badge>{formatKg(w.totalVolume)}</Badge>
+                  <Badge>{w.totalSets} series</Badge>
+                  <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+                </div>
+              </summary>
+              <div className="space-y-3 border-t border-border p-4 pt-3">
+                {w.exercises.map((we) => (
+                    <div key={we.id}>
+                      <p className="mb-1 text-sm font-medium">{we.exercise.name}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {we.sets.map((s) => {
+                          const level = we.exercise.noWeight || !s.completed ? null : repsLevel(s.reps);
+                          return (
+                            <span
+                              key={s.id}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs",
+                                !s.completed
+                                  ? "bg-surface-2 text-muted line-through"
+                                  : level
+                                    ? cn(LEVEL_STYLES[level].chip, "ring-1 ring-inset", LEVEL_STYLES[level].ring)
+                                    : "bg-accent/15 text-accent",
+                              )}
+                            >
+                              {!we.exercise.noWeight && s.weight > 0 ? `${s.weight} kg × ` : ""}
+                              {s.reps}
+                              {s.completed && <Check className="h-3 w-3" />}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-              ))}
-              {w.notes && <p className="text-xs text-muted">📝 {w.notes}</p>}
-              {/* Lo que se corrigió, para que la sesión no cambie sin explicación */}
-              {w.incidents.map((inc) => (
-                <p key={inc.id} className="text-xs text-muted">
-                  🔧 Corregida el {format(inc.createdAt, "d MMM yyyy", { locale: es })}
-                  {inc.reason ? `: ${inc.reason}` : ""}
-                  {inc.pointsDelta !== 0 && ` (${inc.pointsDelta > 0 ? "+" : ""}${inc.pointsDelta} puntos)`}
-                </p>
-              ))}
-              <div className="flex flex-wrap gap-2">
-                {/* Una incidencia por sesión: si ya la usó, el botón se apaga */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={w.incidents.length > 0}
-                  title={
-                    w.incidents.length > 0
-                      ? "Esta sesión ya se corrigió: solo se admite una incidencia"
-                      : "Corregir lo que se anotó mal en esta sesión"
-                  }
-                  onClick={() => setIncident(w.id)}
-                >
-                  <Wrench className="h-3.5 w-3.5" /> Incidencia
-                </Button>
-                <Button
-                  size="sm" variant="ghost" className="text-red-400"
-                  onClick={() => setDayDetail(w.startedAt)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Borrar este día
-                </Button>
+                ))}
+                {w.notes && <p className="text-xs text-muted">📝 {w.notes}</p>}
+                {/* Lo que se corrigió, para que la sesión no cambie sin explicación */}
+                {w.incidents.map((inc) => (
+                  <p key={inc.id} className="text-xs text-muted">
+                    🔧 Corregida el {format(inc.createdAt, "d MMM yyyy", { locale: es })}
+                    {inc.reason ? `: ${inc.reason}` : ""}
+                    {inc.pointsDelta !== 0 && ` (${inc.pointsDelta > 0 ? "+" : ""}${inc.pointsDelta} puntos)`}
+                  </p>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  {/* Una incidencia por sesión: si ya la usó, el botón se apaga */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={w.incidents.length > 0}
+                    title={
+                      w.incidents.length > 0
+                        ? "Esta sesión ya se corrigió: solo se admite una incidencia"
+                        : "Corregir lo que se anotó mal en esta sesión"
+                    }
+                    onClick={() => setIncident(w.id)}
+                  >
+                    <Wrench className="h-3.5 w-3.5" /> Incidencia
+                  </Button>
+                  <Button
+                    size="sm" variant="ghost" className="text-red-400"
+                    onClick={() => setDayDetail(w.startedAt)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Borrar este día
+                  </Button>
+                </div>
+                {incident === w.id && (
+                  <WorkoutIncidentModal workout={w} open onClose={() => setIncident(null)} />
+                )}
               </div>
-              {incident === w.id && (
-                <WorkoutIncidentModal workout={w} open onClose={() => setIncident(null)} />
-              )}
-            </div>
-          </details>
-        ))
-      )}
+            </details>
+          ))
+        )}
+      </div>
 
       <Modal open={legendOpen} onClose={() => setLegendOpen(false)} title="Semáforo de repeticiones">
         <div className="space-y-3">

@@ -5,6 +5,12 @@ import { sendPushToUsers } from "./push";
 
 export const COMMUNITY_STREAKS_TITLE = "Despancetizados de la semana";
 
+/**
+ * Prefijo del anuncio de rachas en el chat. Sirve para no duplicarlo: en el chat
+ * hay otros mensajes de sistema (p. ej. «está entrenando») que no cuentan.
+ */
+const STREAKS_CHAT_PREFIX = "🔥 Rachas de la semana";
+
 /** "Ana", "Ana y Luis", "Ana, Luis y Marta" */
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
@@ -103,7 +109,12 @@ async function announceInGroupChats(
   weekStart: Date,
 ): Promise<number> {
   const already = await db.chatMessage.findMany({
-    where: { groupId: { in: groupIds }, system: true, createdAt: { gte: weekStart } },
+    where: {
+      groupId: { in: groupIds },
+      system: true,
+      text: { startsWith: STREAKS_CHAT_PREFIX },
+      createdAt: { gte: weekStart },
+    },
     select: { groupId: true },
   });
   const done = new Set(already.map((m) => m.groupId));
@@ -122,7 +133,7 @@ async function announceInGroupChats(
     const parts = Array.from(byStreak.entries()).map(
       ([streak, names]) => `${joinNames(names)} (${weeksLabel(streak)})`,
     );
-    const text = `🔥 Rachas de la semana: ¡${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}` : parts[0]} ${mine.length === 1 ? "ha cumplido" : "han cumplido"}!`;
+    const text = `${STREAKS_CHAT_PREFIX}: ¡${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}` : parts[0]} ${mine.length === 1 ? "ha cumplido" : "han cumplido"}!`;
     await db.chatMessage.create({ data: { groupId, text, system: true, userId: null } });
     announced++;
   }

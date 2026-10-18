@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 // siempre, así que ofrecer un interruptor sería mentir.
 const NOTIFY_CATEGORIES: Array<{ key: string; label: string; hint: string }> = [
   { key: "prs", label: "PRs del grupo", hint: "Cuando alguien bate un récord" },
-  { key: "workouts", label: "Entrenos del grupo", hint: "Cuando alguien empieza a entrenar" },
+  { key: "workouts", label: "Entrenos del grupo", hint: "Aviso en el móvil cuando alguien empieza a entrenar (se publica en el chat)" },
   { key: "chat", label: "Mensajes del chat", hint: "Aviso en el móvil cuando alguien escribe en el chat del grupo" },
   { key: "streaks", label: "Rachas y semanas", hint: "Tu racha en peligro o cumplida" },
   { key: "reminders", label: "Recordatorios de entreno", hint: "El aviso diario para no fallar" },

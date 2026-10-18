@@ -202,12 +202,13 @@ export function ChatView() {
               </div>
             );
 
-            // Aviso del sistema (p. ej. las rachas del lunes): sin autor ni reacciones
+            // Aviso del sistema (rachas del lunes, «está entrenando»): sin autor ni
+            // reacciones. Puede llevar varias líneas (título y cuerpo)
             if (m.system || !m.user) {
               return (
                 <div key={m.id} className="space-y-1">
                   <div className="group flex items-center justify-center gap-1.5">
-                    <p className="max-w-[85%] rounded-full bg-surface-2/60 px-3 py-1 text-center text-xs text-muted">
+                    <p className="max-w-[85%] whitespace-pre-line break-words rounded-2xl bg-surface-2/60 px-3 py-1 text-center text-xs text-muted">
                       {m.text}
                     </p>
                     {canDelete && (

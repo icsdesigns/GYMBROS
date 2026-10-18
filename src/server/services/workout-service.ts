@@ -407,12 +407,62 @@ export async function notifyWorkoutStartedIfDue(db: PrismaClient, userId: string
       where: { userId, startedAt: { gte: startOfISOWeek(workout.startedAt), lte: workout.startedAt } },
     }),
   ]);
-  const { notifyGroupFromTemplate } = await import("./notify-templates");
-  await notifyGroupFromTemplate(db, userId, "FRIEND_WORKOUT_START", "workouts", {
-    name: user.name,
-    routine: workout.routine ? `${workout.routine.emoji} ${workout.routine.name}` : "un entrenamiento",
-    weekWorkout: weekOrdinal(weekNumber),
-  });
+  try {
+    await announceWorkoutStart(db, userId, {
+      name: user.name,
+      routine: workout.routine ? `${workout.routine.emoji} ${workout.routine.name}` : "un entrenamiento",
+      weekWorkout: weekOrdinal(weekNumber),
+    });
+  } catch (error) {
+    // La marca ya está reclamada: un fallo aquí no debe romper la consulta del entreno activo
+    console.error("[workout] no se pudo avisar del entreno", error);
+  }
+}
+
+/**
+ * El aviso de «está entrenando» vive en el chat de cada grupo del usuario, como
+ * mensaje de sistema, y además llega como push a los demás miembros (con la
+ * categoría «workouts»). Ya no crea filas en la bandeja de notificaciones.
+ * El texto sale de la plantilla editable FRIEND_WORKOUT_START; si está
+ * desactivada no se publica nada.
+ *
+ * Lo del chat es lo importante y va primero; el push es un efecto secundario:
+ * si falla, no rompe la consulta del entreno activo.
+ */
+async function announceWorkoutStart(
+  db: PrismaClient,
+  userId: string,
+  vars: Record<string, string | number>,
+): Promise<void> {
+  const template = await db.notificationTemplate.findUnique({ where: { code: "FRIEND_WORKOUT_START" } });
+  if (!template || !template.enabled) return;
+  const { fillTemplate } = await import("./notify-prefs");
+  const { pushChatMessage } = await import("./chat");
+  const title = fillTemplate(template.title, vars);
+  const body = template.body ? fillTemplate(template.body, vars) : undefined;
+
+  const memberships = await db.groupMember.findMany({ where: { userId }, select: { groupId: true } });
+  // Quien comparte varios grupos con el autor ve el mensaje en cada chat, pero
+  // recibe un solo push (como antes con notifyOthers)
+  const pushed = new Set<string>();
+  for (const { groupId } of memberships) {
+    try {
+      await db.chatMessage.create({
+        data: { groupId, text: body ? `${title}\n${body}` : title, system: true, userId: null },
+      });
+      await pushChatMessage(db, {
+        groupId,
+        exceptUserId: userId,
+        category: "workouts",
+        title: (groupName) => (groupName ? `${title} · ${groupName}` : title),
+        body,
+        alreadyNotified: pushed,
+      });
+    } catch (error) {
+      // Un grupo que falle no debe impedir el aviso a los demás ni romper la consulta
+      console.error("[workout] no se pudo avisar del entreno en el chat", error);
+    }
+  }
 }
 
 /** Ordinal abreviado para el aviso de entreno: 1er, 2º, 3er, 4º… */

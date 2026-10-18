@@ -3,13 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { subYears } from "date-fns";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { isGroupAdmin, requireGroup } from "@/server/services/group";
-import { usersWithCategory } from "@/server/services/notify-prefs";
-import { sendPushToUsers } from "@/server/services/push";
-
-/** Quien ha leído el chat hace menos de esto se considera que lo tiene abierto (la vista sondea cada 5 s). */
-const CHAT_OPEN_WINDOW_MS = 30_000;
-/** Ruta donde vive el chat del grupo. */
-const CHAT_URL = "/comunidad?tab=chat";
+import { pushChatMessage } from "@/server/services/chat";
 
 export const chatRouter = createTRPCRouter({
   // Últimos 100 mensajes, en orden cronológico.
@@ -110,30 +104,17 @@ export const chatRouter = createTRPCRouter({
       // Push a los demás miembros con la categoría «chat» activa. Es un efecto
       // secundario: si falla, el mensaje ya está enviado y no debe fallar el envío.
       try {
-        const [members, group, sender] = await Promise.all([
-          ctx.db.groupMember.findMany({
-            where: {
-              groupId,
-              userId: { not: ctx.session.user.id },
-              user: { deletionRequestedAt: null },
-            },
-            select: { userId: true, lastChatReadAt: true },
-          }),
-          ctx.db.group.findUnique({ where: { id: groupId }, select: { name: true } }),
-          ctx.db.user.findUnique({ where: { id: ctx.session.user.id }, select: { name: true } }),
-        ]);
-        // Quien tiene el chat abierto ya lo está viendo: sin aviso
-        const openSince = Date.now() - CHAT_OPEN_WINDOW_MS;
-        const candidates = members
-          .filter((m) => !m.lastChatReadAt || m.lastChatReadAt.getTime() < openSince)
-          .map((m) => m.userId);
-        const recipients = await usersWithCategory(ctx.db, candidates, "chat");
+        const sender = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
+          select: { name: true },
+        });
         const senderName = sender?.name ?? "Chat";
-        await sendPushToUsers(ctx.db, recipients, {
-          title: group ? `${senderName} · ${group.name}` : senderName,
+        await pushChatMessage(ctx.db, {
+          groupId,
+          exceptUserId: ctx.session.user.id,
+          category: "chat",
+          title: (groupName) => (groupName ? `${senderName} · ${groupName}` : senderName),
           body: input.text.length > 120 ? `${input.text.slice(0, 117).trimEnd()}…` : input.text,
-          url: CHAT_URL,
-          tag: `chat-${groupId}`,
         });
       } catch (error) {
         console.error("[chat] no se pudo enviar el push", error);
