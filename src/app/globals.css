@@ -137,3 +137,87 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0.6;
   filter: invert(1);
 }
+
+/* ------------------------------------------------------------------------
+   Animaciones ligeras y reutilizables.
+
+   Reglas: solo transform y opacity, entre 150 y 450 ms, sin bucles. Todo va
+   dentro de `no-preference`: con «reducir movimiento» no se anima nada. Las
+   entradas usan fill-mode `backwards` (no `both`) para que, al terminar, el
+   elemento vuelva a sus estilos normales y no deje una capa de composición
+   ni un contexto de apilamiento colgando.
+
+   Uso:
+     gb-fade-up   un elemento entra subiendo y fundiéndose
+     gb-fade-down desplegables: el contenido baja y aparece (<details open>)
+     gb-stagger   en el CONTENEDOR: sus hijos directos entran en cascada
+                  (hasta el 7.º; los demás entran junto al último)
+     gb-tab-panel panel de pestaña: fundido cada vez que pasa de oculto a visible
+     gb-press     elemento pulsable: se hunde (scale .97) al pulsar
+     gb-bar       barra de progreso: el relleno se desliza (ver <ProgressBar>)
+   ------------------------------------------------------------------------ */
+:root {
+  --gb-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gb-fade-up {
+    animation: gb-fade-up 0.32s var(--gb-ease) backwards;
+  }
+  .gb-fade-down {
+    animation: gb-fade-down 0.24s var(--gb-ease) backwards;
+  }
+  .gb-tab-panel {
+    animation: gb-fade-in 0.2s ease-out backwards;
+  }
+
+  .gb-stagger > * {
+    animation: gb-fade-up 0.34s var(--gb-ease) backwards;
+  }
+  .gb-stagger > :nth-child(2) { animation-delay: 40ms; }
+  .gb-stagger > :nth-child(3) { animation-delay: 80ms; }
+  .gb-stagger > :nth-child(4) { animation-delay: 120ms; }
+  .gb-stagger > :nth-child(5) { animation-delay: 160ms; }
+  .gb-stagger > :nth-child(6) { animation-delay: 200ms; }
+  .gb-stagger > :nth-child(n + 7) { animation-delay: 240ms; }
+
+  /* Contenido de un <details> al abrirlo (el resumen no se anima) */
+  details.gb-reveal[open] > :not(summary) {
+    animation: gb-fade-down 0.24s var(--gb-ease) backwards;
+  }
+
+  /* Feedback de pulsación */
+  .gb-press {
+    transition:
+      transform 0.15s var(--gb-ease),
+      color 0.15s,
+      background-color 0.15s,
+      border-color 0.15s,
+      opacity 0.15s;
+  }
+  .gb-press:active {
+    transform: scale(0.97);
+  }
+
+  /* Relleno de barra: entra deslizándose desde la izquierda al montarse y,
+     si el valor cambia, se desplaza hasta la nueva posición. El relleno mide
+     siempre el 100 % y se desplaza con translateX (su valor lo pone quien lo
+     usa), de modo que el borde redondeado no se deforma. */
+  .gb-bar {
+    transition: transform 0.5s var(--gb-ease);
+    animation: gb-bar-in 0.7s var(--gb-ease) 0.1s backwards;
+  }
+}
+
+@keyframes gb-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@keyframes gb-fade-in {
+  from { opacity: 0; }
+}
+@keyframes gb-fade-down {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes gb-bar-in {
+  from { transform: translateX(-100%); }
+}

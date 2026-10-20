@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { computeStableMarks, type StableMark } from "@/lib/stable-mark";
-import { awardPoints, addFeed, checkAchievements } from "@/server/services/gamification";
+import { addFeed, checkAchievements } from "@/server/services/gamification";
 
 export const prRouter = createTRPCRouter({
   create: protectedProcedure
@@ -30,7 +30,7 @@ export const prRouter = createTRPCRouter({
       });
       const isNewBest = !best || input.weight > best.weight;
       if (isNewBest) {
-        await awardPoints(ctx.db, userId, "NEW_PR", { exerciseId: input.exerciseId, weight: input.weight });
+        // Los PR ya no dan puntos: solo feed, aviso al grupo y logros
         const user = await ctx.db.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
         // Público: el evento del PR. Privado: el peso alcanzado.
         await addFeed(ctx.db, userId, "PR", `${user.name} consiguió un nuevo PR en ${exercise.name} 🎉`);

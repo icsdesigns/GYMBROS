@@ -55,9 +55,7 @@ export const workoutRouter = createTRPCRouter({
           include: { exercises: { orderBy: { order: "asc" } } },
         });
         if (!routine) throw new TRPCError({ code: "NOT_FOUND" });
-        if (routine.userId !== ctx.session.user.id && !routine.isShared) {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
+        // Las rutinas del grupo son públicas: cualquier miembro autenticado puede ejecutarlas
         // Precargar pesos y reps con los de la ÚLTIMA sesión en la que se
         // completó alguna serie de cada ejercicio (si no hay historial, se usa
         // el objetivo de la rutina). touched=false hasta que se editen.
@@ -86,7 +84,8 @@ export const workoutRouter = createTRPCRouter({
                 return {
                   setNumber: i + 1,
                   reps: prev?.reps ?? re.reps,
-                  weight: prev?.weight ?? re.targetWeight ?? 0,
+                  // El objetivo de peso de una rutina ajena es privado: no se precarga
+                  weight: prev?.weight ?? (routine.userId === ctx.session.user.id ? re.targetWeight : null) ?? 0,
                 };
               }),
             };

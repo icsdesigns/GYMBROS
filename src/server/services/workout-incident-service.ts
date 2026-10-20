@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
-import { startOfDay, addDays } from "date-fns";
-import { awardPoints, awardWorkoutPoints } from "./gamification";
+import { startOfDay } from "date-fns";
+import { awardWorkoutPoints } from "./gamification";
 import { syncRoutineFromWorkout } from "./workout-service";
 import { MAX_INCIDENT_CHANGES } from "@/lib/utils";
 
@@ -35,30 +35,12 @@ export type IncidentAddition = {
   completed?: boolean;
 };
 
-/** Deshace un PR automático y devuelve los puntos que hay que retirar con él. */
-async function removeAutoPR(
-  db: PrismaClient,
-  userId: string,
-  pr: { id: string; exerciseId: string; weight: number; date: Date },
-): Promise<number> {
-  // Los puntos se buscan igual que al borrar un día: por ejercicio y peso,
-  // dentro de la ventana del PR (un entreno de madrugada puede registrarlos
-  // ya en la fecha siguiente).
-  const events = await db.pointEvent.findMany({
-    where: {
-      userId,
-      type: "NEW_PR",
-      date: { gte: startOfDay(pr.date), lte: addDays(pr.date, 1) },
-      AND: [
-        { meta: { path: ["exerciseId"], equals: pr.exerciseId } },
-        { meta: { path: ["weight"], equals: pr.weight } },
-      ],
-    },
-    select: { id: true, points: true },
-  });
-  await db.pointEvent.deleteMany({ where: { id: { in: events.map((e) => e.id) } } });
+/**
+ * Deshace un PR automático. Los PR ya no dan puntos y los que se concedieron
+ * en su día se conservan, así que aquí solo se retira el récord.
+ */
+async function removeAutoPR(db: PrismaClient, pr: { id: string }) {
   await db.personalRecord.delete({ where: { id: pr.id } });
-  return events.reduce((acc, e) => acc + e.points, 0);
 }
 
 /**
@@ -67,14 +49,15 @@ async function removeAutoPR(
  * Se recorren las sesiones en orden, como si se estuvieran terminando otra vez:
  * así un 180 que en realidad era 80 deja de tapar los PRs que vinieron después.
  * No se publica nada en el feed ni se avisa al grupo (la sesión es vieja y el
- * grupo ya recibió su aviso en su día); lo que sí se ajusta son los puntos.
+ * grupo ya recibió su aviso en su día). Los PR no mueven puntos: ni se dan
+ * nuevos ni se retiran los ya concedidos.
  */
 async function recomputeAutoPRs(
   db: PrismaClient,
   userId: string,
   exerciseId: string,
   since: Date,
-): Promise<{ delta: number; created: string[]; removed: number }> {
+): Promise<{ created: string[]; removed: number }> {
   const from = startOfDay(since);
   const exercise = await db.exercise.findUniqueOrThrow({
     where: { id: exerciseId },
@@ -85,8 +68,7 @@ async function recomputeAutoPRs(
     where: { userId, exerciseId, isAuto: true, date: { gte: from } },
     select: { id: true, exerciseId: true, weight: true, date: true },
   });
-  let delta = 0;
-  for (const pr of stale) delta -= await removeAutoPR(db, userId, pr);
+  for (const pr of stale) await removeAutoPR(db, pr);
 
   // Punto de partida: la mejor marca anterior a la sesión corregida, sea
   // automática o puesta a mano. Si no hay ninguna, el primer entreno del tramo
@@ -143,12 +125,11 @@ async function recomputeAutoPRs(
         isAuto: true, notes: "Recalculado tras corregir una incidencia",
       },
     });
-    delta += await awardPoints(db, userId, "NEW_PR", { exerciseId, weight: top.weight });
     created.push(`${exercise.name}: ${exercise.noWeight ? `${top.reps} reps` : `${top.weight} kg`}`);
     best = { weight: Math.max(best.weight, top.weight), reps: Math.max(best.reps, top.reps) };
   }
 
-  return { delta, created, removed: stale.length };
+  return { created, removed: stale.length };
 }
 
 /**
@@ -260,10 +241,16 @@ export async function applyWorkoutIncident(
 
   let pointsDelta = 0;
 
-  // Los puntos del entreno van por serie (+ el fijo por entrenar): se rehacen con las series corregidas
+  // Los puntos del entreno van por serie y por asistencia (o juntos, en los
+  // antiguos): se rehacen con las series corregidas
   const oldWorkoutPoints = await db.pointEvent.findMany({
-    where: { userId, type: "WORKOUT_COMPLETED", meta: { path: ["workoutId"], equals: workoutId } },
+    where: {
+      userId,
+      type: { in: ["WORKOUT_COMPLETED", "ATTENDANCE"] },
+      meta: { path: ["workoutId"], equals: workoutId },
+    },
     select: { id: true, points: true, date: true },
+    orderBy: { date: "asc" },
   });
   if (oldWorkoutPoints.length > 0) {
     await db.pointEvent.deleteMany({ where: { id: { in: oldWorkoutPoints.map((e) => e.id) } } });
@@ -272,7 +259,11 @@ export async function applyWorkoutIncident(
     // Conserva la fecha original para que no salte de semana ni de temporada
     if (awarded > 0) {
       await db.pointEvent.updateMany({
-        where: { userId, type: "WORKOUT_COMPLETED", meta: { path: ["workoutId"], equals: workoutId } },
+        where: {
+          userId,
+          type: { in: ["WORKOUT_COMPLETED", "ATTENDANCE"] },
+          meta: { path: ["workoutId"], equals: workoutId },
+        },
         data: { date: oldWorkoutPoints[0]!.date },
       });
     }
@@ -283,7 +274,6 @@ export async function applyWorkoutIncident(
   let removedPRs = 0;
   for (const exerciseId of Array.from(touchedExercises)) {
     const res = await recomputeAutoPRs(db, userId, exerciseId, workout.startedAt);
-    pointsDelta += res.delta;
     newPRs.push(...res.created);
     removedPRs += res.removed;
   }

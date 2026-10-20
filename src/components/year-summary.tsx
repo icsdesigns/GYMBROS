@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarRange, Repeat } from "lucide-react";
+import { CountUp } from "@/components/ui";
 
 /**
  * Lo que de verdad dice si alguien entrena: cuántas veces ha ido en el último
@@ -13,7 +14,7 @@ export function YearSummary({ workouts, monthlyAvg }: { workouts: number; monthl
         <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted">
           <CalendarRange className="h-3.5 w-3.5" /> Último año
         </p>
-        <p className="mt-1 text-2xl font-bold">{workouts}</p>
+        <p className="mt-1 text-2xl font-bold"><CountUp value={workouts} /></p>
         <p className="text-xs text-muted">
           {workouts === 1 ? "entrenamiento" : "entrenamientos"}
         </p>
@@ -23,7 +24,7 @@ export function YearSummary({ workouts, monthlyAvg }: { workouts: number; monthl
           <Repeat className="h-3.5 w-3.5" /> Promedio
         </p>
         <p className="mt-1 text-2xl font-bold">
-          {monthlyAvg.toLocaleString("es-ES", { maximumFractionDigits: 1 })}
+          <CountUp value={monthlyAvg} decimals={Number.isInteger(monthlyAvg) ? 0 : 1} />
         </p>
         <p className="text-xs text-muted">entrenamientos al mes</p>
       </div>

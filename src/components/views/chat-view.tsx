@@ -5,13 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { format } from "date-fns";
+import { format, isSameDay, isSameYear, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Pencil, Send, X } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Avatar, Button, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { useViewAsUser } from "@/lib/use-view-as-user";
 
 /**
  * Chat del grupo a pantalla completa.
@@ -35,10 +34,12 @@ export function ChatView() {
   });
   const { data: users } = api.user.list.useQuery();
   const [text, setText] = useState("");
+  // Mensaje pulsado: muestra sus reacciones y, si es mío, el botón de editar
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  // Mensaje que se está editando y su texto
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [mounted, setMounted] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [viewAsUser] = useViewAsUser();
 
   const myId = session?.user.id;
 
@@ -74,11 +75,16 @@ export function ChatView() {
   });
   const sendError = send.error?.message ?? null;
 
-  const remove = api.chat.delete.useMutation({
-    onMutate: async ({ id }) => {
+  // Los mensajes se pueden editar pero no borrar. La edición es optimista: el texto cambia al
+  // instante y el servidor confirma detrás.
+  const edit = api.chat.edit.useMutation({
+    onMutate: async ({ id, text: newText }) => {
       await utils.chat.list.cancel();
       const previous = utils.chat.list.getData();
-      if (previous) utils.chat.list.setData(undefined, previous.filter((m) => m.id !== id));
+      if (previous) {
+        utils.chat.list.setData(undefined, previous.map((m) => (m.id === id ? { ...m, text: newText } : m)));
+      }
+      setEditing(null);
       return { previous };
     },
     onError: (_err, _vars, context) => {
@@ -152,7 +158,14 @@ export function ChatView() {
       readersByMessage.set(anchor, list);
     }
   }
-  const canDelete = session?.user.role === "ADMIN" && !viewAsUser;
+
+  // Separador de día: la fecha va fuera de los mensajes, centrada, una vez por día
+  const dayLabel = (d: Date) =>
+    isToday(d)
+      ? "Hoy"
+      : isYesterday(d)
+        ? "Ayer"
+        : format(d, isSameYear(d, new Date()) ? "EEEE d 'de' MMMM" : "EEEE d 'de' MMMM 'de' yyyy", { locale: es });
 
   return createPortal(
     <div
@@ -164,17 +177,6 @@ export function ChatView() {
         "md:left-60 md:pb-0 md:pt-0",
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
-        <button
-          onClick={() => router.replace("/comunidad?tab=ranking", { scroll: false })}
-          aria-label="Volver a Comunidad"
-          className="rounded-xl p-1.5 text-muted transition hover:bg-surface-2 hover:text-fg"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h1 className="font-semibold">Chat del grupo</h1>
-      </div>
-
       {isLoading ? (
         <div className="flex-1"><Spinner /></div>
       ) : (
@@ -184,7 +186,11 @@ export function ChatView() {
               Nadie ha escrito todavía. ¡Rompe el hielo! 💬
             </p>
           )}
-          {messages?.map((m) => {
+          {messages?.map((m, i) => {
+            const prev = i > 0 ? messages[i - 1] : null;
+            const dayDivider = (!prev || !isSameDay(prev.createdAt, m.createdAt)) && (
+              <p className="py-1 text-center text-xs font-medium capitalize text-muted">{dayLabel(m.createdAt)}</p>
+            );
             const readers = readersByMessage.get(m.id);
             const seenLabel = readers ? `Visto por ${readers.map((r) => r.name).join(", ")}` : "";
             const seenBy = readers && readers.length > 0 && (
@@ -203,23 +209,16 @@ export function ChatView() {
             );
 
             // Aviso del sistema (rachas del lunes, «está entrenando»): sin autor ni
-            // reacciones. Puede llevar varias líneas (título y cuerpo)
+            // reacciones. Puede llevar varias líneas (título y cuerpo); lleva la hora
             if (m.system || !m.user) {
               return (
                 <div key={m.id} className="space-y-1">
-                  <div className="group flex items-center justify-center gap-1.5">
-                    <p className="max-w-[85%] whitespace-pre-line break-words rounded-2xl bg-surface-2/60 px-3 py-1 text-center text-xs text-muted">
-                      {m.text}
-                    </p>
-                    {canDelete && (
-                      <button
-                        title="Borrar aviso"
-                        onClick={() => remove.mutate({ id: m.id })}
-                        className="text-muted/50 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                  {dayDivider}
+                  <div className="flex items-center justify-center">
+                    <div className="max-w-[85%] rounded-2xl bg-surface-2/60 px-3 py-1 text-center text-xs text-muted">
+                      <p className="whitespace-pre-line break-words">{m.text}</p>
+                      <p className="mt-0.5 text-[10px] opacity-70">{format(m.createdAt, "HH:mm")}</p>
+                    </div>
                   </div>
                   {seenBy}
                 </div>
@@ -228,31 +227,72 @@ export function ChatView() {
 
             const author = m.user;
             const mine = author.id === myId;
+            const isEditing = editing?.id === m.id;
+            // Solo los míos y ya confirmados por el servidor (los optimistas aún tienen id temporal)
+            const canEdit = mine && !m.id.startsWith("temp-");
             return (
               <div key={m.id} className="space-y-1">
-                <div className={cn("group flex items-end gap-2", mine && "flex-row-reverse")}>
+                {dayDivider}
+                <div className={cn("flex items-end gap-2", mine && "flex-row-reverse")}>
                   {!mine && (
                     <Link href={`/perfil/${author.id}`} className="shrink-0 transition hover:opacity-80">
                       <Avatar name={author.name} src={avatarOf(author.id)} size={28} />
                     </Link>
                   )}
                   <div className={cn("max-w-[75%]", mine && "flex flex-col items-end")}>
-                    <button
-                      type="button"
-                      onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}
-                      className={cn(
-                        "block w-full rounded-2xl px-3 py-2 text-left",
-                        mine ? "rounded-br-md bg-accent/20" : "rounded-bl-md bg-surface-2",
-                      )}
-                    >
-                      {!mine && <p className="text-xs font-semibold text-accent">{author.name}</p>}
-                      <p className="whitespace-pre-wrap break-words text-sm">{m.text}</p>
-                      <p className="mt-0.5 text-right text-[10px] text-muted">
-                        {format(m.createdAt, "d MMM · HH:mm", { locale: es })}
-                      </p>
-                    </button>
-                    {(m.reactions.length > 0 || pickerFor === m.id) && (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                    {isEditing ? (
+                      <form
+                        className="w-full space-y-1.5 rounded-2xl rounded-br-md bg-accent/20 p-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const t = editing.text.trim();
+                          if (t.length === 0) return;
+                          if (t === m.text) setEditing(null);
+                          else edit.mutate({ id: m.id, text: t });
+                        }}
+                      >
+                        <textarea
+                          autoFocus
+                          value={editing.text}
+                          onChange={(e) => setEditing({ id: m.id, text: e.target.value })}
+                          maxLength={1000}
+                          rows={2}
+                          className="w-full resize-none rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/60"
+                        />
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            aria-label="Cancelar la edición"
+                            className="rounded-lg bg-surface-2 px-2 py-1 text-xs text-muted transition hover:text-fg"
+                          >
+                            <X className="inline h-3.5 w-3.5" /> Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={editing.text.trim().length === 0}
+                            className="rounded-lg bg-accent px-2 py-1 text-xs font-medium text-accent-fg disabled:opacity-50"
+                          >
+                            <Check className="inline h-3.5 w-3.5" /> Guardar
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}
+                        className={cn(
+                          "block w-full rounded-2xl px-3 py-2 text-left",
+                          mine ? "rounded-br-md bg-accent/20" : "rounded-bl-md bg-surface-2",
+                        )}
+                      >
+                        {!mine && <p className="text-xs font-semibold text-accent">{author.name}</p>}
+                        <p className="whitespace-pre-wrap break-words text-sm">{m.text}</p>
+                        <p className="mt-0.5 text-right text-[10px] text-muted">{format(m.createdAt, "HH:mm")}</p>
+                      </button>
+                    )}
+                    {!isEditing && (m.reactions.length > 0 || pickerFor === m.id) && (
+                      <div className={cn("mt-1 flex flex-wrap items-center gap-1", mine && "justify-end")}>
                         {(["👍", "💪", "🔥"] as const).map((emoji) => {
                           const count = m.reactions.filter((r) => r.emoji === emoji).length;
                           const iReacted = m.reactions.some((r) => r.emoji === emoji && r.userId === myId);
@@ -271,18 +311,22 @@ export function ChatView() {
                             </button>
                           );
                         })}
+                        {/* Editar aparece al pulsar el mensaje (no hay opción de borrar) */}
+                        {canEdit && pickerFor === m.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPickerFor(null);
+                              setEditing({ id: m.id, text: m.text });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted transition hover:bg-accent/15 hover:text-fg"
+                          >
+                            <Pencil className="h-3 w-3" aria-hidden /> Editar
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                  {(mine || canDelete) && (
-                    <button
-                      title="Borrar mensaje"
-                      onClick={() => remove.mutate({ id: m.id })}
-                      className="text-muted/50 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
                 </div>
                 {seenBy}
               </div>
@@ -298,12 +342,22 @@ export function ChatView() {
         </p>
       )}
       <form
-        className="flex shrink-0 gap-2 border-t border-border p-3"
+        className="flex shrink-0 items-center gap-2 border-t border-border p-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (text.trim().length > 0) send.mutate({ text: text.trim() });
         }}
       >
+        {/* Sin cabecera propia: la flecha de volver vive junto al cuadro de escribir */}
+        <button
+          type="button"
+          onClick={() => router.replace("/comunidad?tab=ranking", { scroll: false })}
+          aria-label="Volver a Comunidad"
+          title="Volver a Comunidad"
+          className="shrink-0 rounded-xl p-2 text-muted transition hover:bg-surface-2 hover:text-fg"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}

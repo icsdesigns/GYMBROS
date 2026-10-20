@@ -80,7 +80,12 @@ function routineTrend(sessions: Map<string, { date: Date; kg: number; reps: numb
  * Lo usan la pestaña Progreso (del propio usuario) y el perfil de los demás
  * miembros, para que ambos enseñen exactamente lo mismo.
  */
-export async function routineTrendsFor(db: PrismaClient, userId: string) {
+export async function routineTrendsFor(
+  db: PrismaClient,
+  userId: string,
+  /** Si se da, solo cuentan los entrenos empezados antes de esta fecha (cierre de semana). */
+  before?: Date,
+) {
   const [routines, workoutExercises] = await Promise.all([
     db.routine.findMany({
       where: { userId },
@@ -97,7 +102,7 @@ export async function routineTrendsFor(db: PrismaClient, userId: string) {
       orderBy: { updatedAt: "desc" },
     }),
     db.workoutExercise.findMany({
-      where: { workout: { userId, endedAt: { not: null } } },
+      where: { workout: { userId, endedAt: { not: null }, ...(before ? { startedAt: { lt: before } } : {}) } },
       select: {
         exerciseId: true,
         workout: { select: { id: true, startedAt: true, routineId: true } },

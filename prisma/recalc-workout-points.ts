@@ -9,6 +9,9 @@ import { WORKOUT_BONUS_POINTS, workoutPointUnits } from "../src/server/services/
  *   npm run db:recalc-workout-points            → solo muestra lo que cambiaría
  *   npm run db:recalc-workout-points -- --apply → lo aplica
  *
+ * Solo toca los eventos antiguos (que juntan series y asistencia en uno): los
+ * nuevos, ya separados en Series y Asistencia (`meta.split`), se saltan.
+ *
  * Cada evento conserva su fecha, así que nadie cambia de semana ni de
  * temporada: solo se ajusta la cantidad.
  */
@@ -25,11 +28,13 @@ async function main() {
   const perSet = PER_SET;
   if (rule.points !== PER_SET) console.log(`La regla vale hoy ${rule.points} por serie: pasará a ${PER_SET}.`);
 
-  const events = await prisma.pointEvent.findMany({
-    where: { type: "WORKOUT_COMPLETED" },
-    orderBy: { date: "asc" },
-    select: { id: true, userId: true, points: true, date: true, meta: true, user: { select: { name: true } } },
-  });
+  const events = (
+    await prisma.pointEvent.findMany({
+      where: { type: "WORKOUT_COMPLETED" },
+      orderBy: { date: "asc" },
+      select: { id: true, userId: true, points: true, date: true, meta: true, user: { select: { name: true } } },
+    })
+  ).filter((e) => (e.meta as { split?: boolean } | null)?.split !== true);
 
   const workoutIds = events
     .map((e) => (e.meta as { workoutId?: string } | null)?.workoutId)

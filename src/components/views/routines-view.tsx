@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import {
-  Plus, Copy, Share2, Trash2, Download, FileDown, FileUp, Power, ArrowUp, ArrowDown,
+  Plus, Copy, Trash2, Download, FileDown, FileUp, Power, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { api } from "@/trpc/react";
-import { Button, Card, Spinner, EmptyState, Badge, Avatar } from "@/components/ui";
+import { Button, Card, Spinner, EmptyState, Avatar } from "@/components/ui";
 import { formatKg } from "@/lib/utils";
 
 type ExportedRoutine = {
@@ -74,14 +74,6 @@ export function RoutinesView() {
       const previous = utils.routine.mine.getData();
       if (previous) utils.routine.mine.setData(undefined, previous.filter((r) => r.id !== id));
       return { previous };
-    },
-    onError: (_err, _vars, context) => rollbackMine(context),
-    onSettled: invalidate,
-  });
-  const toggleShare = api.routine.toggleShare.useMutation({
-    onMutate: ({ id }) => {
-      const current = utils.routine.mine.getData()?.find((r) => r.id === id);
-      return optimisticPatch(id, { isShared: !current?.isShared });
     },
     onError: (_err, _vars, context) => rollbackMine(context),
     onSettled: invalidate,
@@ -231,7 +223,7 @@ export function RoutinesView() {
         <EmptyState
           icon="📋"
           title="Todavía no tienes rutinas"
-          subtitle="Crea tu primera rutina o clona una compartida por el grupo"
+          subtitle="Crea tu primera rutina o clona una del grupo"
           action={
             <Link href="/rutinas/nueva">
               <Button>Crear rutina</Button>
@@ -239,7 +231,7 @@ export function RoutinesView() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="gb-stagger space-y-2">
           {routines.map((r, i) => {
             const s = statsOf(r.id);
             const real = (s?.sessions ?? 0) > 0;
@@ -275,9 +267,6 @@ export function RoutinesView() {
                   <Link href={`/rutinas/${r.id}`} className="block">
                     <p className="flex items-center gap-1.5 truncate font-semibold leading-tight">
                       <span className="truncate">{r.emoji} {r.name}</span>
-                      {r.isShared && (
-                        <Badge className="shrink-0 bg-accent/15 text-accent">Compartida</Badge>
-                      )}
                     </p>
                     {r.description && (
                       <p className="truncate text-xs text-muted">{r.description}</p>
@@ -315,14 +304,6 @@ export function RoutinesView() {
                   <Button size="sm" variant="ghost" title="Duplicar" onClick={() => duplicate.mutate({ id: r.id })}>
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    title={r.isShared ? "Dejar de compartir" : "Compartir con el grupo"}
-                    onClick={() => toggleShare.mutate({ id: r.id })}
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                  </Button>
                   <Button size="sm" variant="ghost" title="Exportar a archivo" onClick={() => exportRoutine(r)}>
                     <FileDown className="h-3.5 w-3.5" />
                   </Button>
@@ -346,7 +327,7 @@ export function RoutinesView() {
 
       {(shared?.length ?? 0) > 0 && (
         <section>
-          <h2 className="mb-4 text-lg font-semibold">Compartidas por el grupo</h2>
+          <h2 className="mb-4 text-lg font-semibold">Rutinas del grupo</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {shared?.map((r) => (
               <Card key={r.id} className="flex flex-col gap-3">

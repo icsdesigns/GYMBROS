@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 import { Trophy, AlertTriangle } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Card, Spinner } from "@/components/ui";
+import { AchievementsPanel } from "@/components/achievements-panel";
 import { MonthBrowser } from "@/components/month-browser";
 import { PointsBreakdown } from "@/components/points-breakdown";
 import { PointsInfo } from "@/components/points-info";
@@ -26,7 +27,7 @@ export default function DashboardPage() {
   const now = new Date();
 
   return (
-    <div className="space-y-6">
+    <div className="gb-stagger space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Hola, {data.user.name.split(" ")[0]} 👋</h1>
@@ -37,8 +38,12 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* Botón central: registrar / actualizar entrenamiento */}
-      <WorkoutLauncher />
+      {/* Botón central: registrar / actualizar entrenamiento. Va envuelto: la
+          entrada en cascada de gb-stagger anima a los hijos directos y anularía
+          el animate-pulse-glow del botón. */}
+      <div>
+        <WorkoutLauncher />
+      </div>
 
       {/* Aviso cuando la racha se juega los últimos días de la semana */}
       {data.streak.atRisk && data.streak.missing >= data.streak.daysLeft && (
@@ -87,11 +92,13 @@ export default function DashboardPage() {
               Ver ranking
             </Link>
           </div>
-          <PointsBreakdown items={data.pointsBreakdown} total={data.totalPoints} />
+          <PointsBreakdown categories={data.pointsCategories} total={data.totalPoints} />
         </Card>
 
       </div>
 
+      {/* Logros conseguidos y pendientes */}
+      <AchievementsPanel />
 
     </div>
   );

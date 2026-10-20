@@ -8,6 +8,8 @@ import {
 } from "@/server/services/notify-prefs";
 import { RESET_TTL_MINUTES, createResetToken, resetUrl } from "@/server/services/password-reset";
 import { groupMemberIds } from "@/server/services/group";
+import { ensureDefaultRules } from "@/server/services/points";
+import { RULE_INFO } from "@/lib/points";
 
 export const adminRouter = createTRPCRouter({
   users: adminProcedure.query(async ({ ctx }) => {
@@ -67,9 +69,14 @@ export const adminRouter = createTRPCRouter({
 
   // ---------- Sistema de puntos personalizable ----------
 
-  listRules: adminProcedure.query(({ ctx }) =>
-    ctx.db.pointRule.findMany({ where: { type: { not: null } }, orderBy: { name: "asc" } }),
-  ),
+  // Solo las reglas vigentes (ver RULE_INFO): los PR ya no puntúan y no aparecen
+  listRules: adminProcedure.query(async ({ ctx }) => {
+    await ensureDefaultRules(ctx.db);
+    // Se filtra aquí y no en la consulta: un tipo que aún no exista en el enum de
+    // la base de datos (p. ej. PROGRESS_WEEKLY sin migrar) haría fallar el IN entero
+    const rules = await ctx.db.pointRule.findMany({ where: { type: { not: null } } });
+    return rules.filter((r) => r.type && RULE_INFO[r.type]);
+  }),
 
   updateRule: adminProcedure
     .input(

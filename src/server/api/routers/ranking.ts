@@ -63,7 +63,7 @@ async function computeRanking(
 
 export const rankingRouter = createTRPCRouter({
   get: protectedProcedure
-    .input(z.object({ period: z.enum(["week", "month", "season", "year"]).default("week") }))
+    .input(z.object({ period: z.enum(["week", "month", "season", "year"]).default("month") }))
     .query(async ({ ctx, input }) => {
       const current = periodRange(input.period);
       // Comparación por tramos equivalentes de tiempo transcurrido
@@ -83,6 +83,19 @@ export const rankingRouter = createTRPCRouter({
       ]);
       const streaks = await streaksForUsers(ctx.db, users);
 
+      // Veces que ha entrenado cada uno en la semana activa (lunes-domingo),
+      // sea cual sea el periodo del ranking: se muestra junto a cada nombre.
+      const week = periodRange("week");
+      const weekGrouped =
+        memberIds.length > 0
+          ? await ctx.db.attendance.groupBy({
+              by: ["userId"],
+              where: { userId: { in: memberIds }, date: { gte: week.from, lte: week.to } },
+              _count: { _all: true },
+            })
+          : [];
+      const weekTrainings = new Map(weekGrouped.map((g) => [g.userId, g._count._all]));
+
       const prevPos = new Map(previousRanking.map((r, i) => [r.userId, i + 1]));
       const pointsByUser = new Map(currentRanking.map((r) => [r.userId, r.points]));
 
@@ -90,6 +103,7 @@ export const rankingRouter = createTRPCRouter({
         .map(({ lastCompletedWeek, weeklyTargetDays, ...u }) => ({
           user: { ...u, currentStreak: streaks.get(u.id) ?? 0 },
           points: pointsByUser.get(u.id) ?? 0,
+          weekTrainings: weekTrainings.get(u.id) ?? 0,
         }))
         .sort((a, b) => b.points - a.points)
         .map((row, i) => {
@@ -123,7 +137,7 @@ export const rankingRouter = createTRPCRouter({
     }),
 
   myBreakdown: protectedProcedure
-    .input(z.object({ period: z.enum(["week", "month", "season", "year"]).default("week") }))
+    .input(z.object({ period: z.enum(["week", "month", "season", "year"]).default("month") }))
     .query(async ({ ctx, input }) => {
       const { from, to } = periodRange(input.period);
       const grouped = await ctx.db.pointEvent.groupBy({

@@ -51,7 +51,7 @@ function Section({ icon, title, children, defaultOpen = false }: {
   icon: React.ReactNode; title: string; children: React.ReactNode; defaultOpen?: boolean;
 }) {
   return (
-    <details open={defaultOpen} className="group rounded-2xl border border-border bg-surface">
+    <details open={defaultOpen} className="gb-reveal group rounded-2xl border border-border bg-surface">
       <summary className="flex cursor-pointer list-none items-center justify-between p-4 [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2 font-semibold">{icon} {title}</span>
         <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
@@ -126,7 +126,7 @@ export default function SettingsPage() {
   const prefs = (me.notifyPrefs ?? {}) as Record<string, boolean>;
 
   return (
-    <div className="space-y-8">
+    <div className="gb-stagger space-y-8">
       <div className="max-w-lg space-y-3">
         <h1 className="text-2xl font-bold">Ajustes</h1>
 

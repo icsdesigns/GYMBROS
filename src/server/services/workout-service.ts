@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import {
-  awardPoints, awardWorkoutPoints, addFeed, notify, checkAchievements, workoutPointUnits, WORKOUT_BONUS_POINTS,
+  awardWorkoutPoints, addFeed, notify, checkAchievements, workoutPointUnits,
 } from "./gamification";
 import { registerAttendance } from "./attendance-service";
 import { startOfISOWeek } from "date-fns";
@@ -101,9 +101,10 @@ const STREAK_LABELS: Record<string, string> = {
 };
 
 /**
- * Desglose de todo lo que ha dado terminar la sesión: series, el fijo por
- * entrenar, cada PR y la racha si con este entreno se cumplió la semana. Sale
+ * Desglose de todo lo que ha dado terminar la sesión: series, asistencia (el
+ * fijo por entrenar) y la racha si con este entreno se cumplió la semana. Sale
  * de los eventos de puntos ya guardados, así cuadra siempre con el ranking.
+ * Los PR ya no puntúan.
  */
 async function sessionBreakdown(
   db: PrismaClient,
@@ -119,17 +120,14 @@ async function sessionBreakdown(
     orderBy: { date: "asc" },
     select: { type: true, points: true, meta: true },
   });
-  const names = new Map(workout.exercises.map((we) => [we.exerciseId, we.exercise.name]));
   const lines: PointLine[] = [];
   for (const e of events) {
-    const meta = (e.meta ?? {}) as { workoutId?: string; exerciseId?: string };
+    const meta = (e.meta ?? {}) as { workoutId?: string };
     if (e.type === "WORKOUT_COMPLETED" && meta.workoutId === workout.id) {
       const sets = workoutPointUnits(workout.exercises);
-      const bonus = Math.min(WORKOUT_BONUS_POINTS, e.points);
-      lines.push({ label: `${sets} ${sets === 1 ? "serie realizada" : "series realizadas"}`, points: e.points - bonus });
-      if (bonus > 0) lines.push({ label: "Por entrenar", points: bonus });
-    } else if (e.type === "NEW_PR" && meta.exerciseId && names.has(meta.exerciseId)) {
-      lines.push({ label: `PR en ${names.get(meta.exerciseId)}`, points: e.points });
+      lines.push({ label: `${sets} ${sets === 1 ? "serie realizada" : "series realizadas"}`, points: e.points });
+    } else if (e.type === "ATTENDANCE" && meta.workoutId === workout.id) {
+      lines.push({ label: "Por entrenar", points: e.points });
     } else if (STREAK_LABELS[e.type]) {
       lines.push({ label: STREAK_LABELS[e.type]!, points: e.points });
     }
@@ -281,8 +279,7 @@ export async function finishWorkout(
             isAuto: true, notes: "Detectado automáticamente al finalizar el entrenamiento",
           },
         }),
-        awardPoints(db, userId, "NEW_PR", { exerciseId: we.exerciseId, weight: best.weight }),
-        // Público: el evento del PR. Privado: el peso alcanzado.
+        // Los PR ya no dan puntos. Público: el evento del PR. Privado: el peso alcanzado.
         addFeed(db, userId, "PR", `${user.name} consiguió un nuevo PR en ${we.exercise.name} 🎉`),
       );
       prExerciseNames.push(we.exercise.name);
@@ -301,7 +298,7 @@ export async function finishWorkout(
   }
 
   const [workoutPoints] = await Promise.all([
-    // Entrenamiento completado: 1 punto (valor de la regla) por serie realizada + 5 por entrenar
+    // Series (1 punto por serie realizada) y asistencia (+5 por entrenar), valores de sus reglas
     awardWorkoutPoints(db, userId, workout.id, workout.exercises),
     // El volumen levantado es privado: no se publica en el feed
     addFeed(db, userId, "WORKOUT", `${user.name} completó ${workout.routine ? `la rutina ${workout.routine.emoji} ${workout.routine.name}` : "un entrenamiento"} ✅`),

@@ -192,8 +192,8 @@ async function purgeStreakPoints(db: PrismaClient, userId: string, keepWeeks: Se
 
 /**
  * Borra por completo un día de entrenamiento: la asistencia, los entrenos de
- * ese día y TODO lo que generaron (puntos de asistencia, de entreno completado
- * y de PR, los PRs autodetectados y las publicaciones del feed). Después
+ * ese día y TODO lo que generaron (puntos de asistencia, de series y de PR
+ * históricos, los PRs autodetectados y las publicaciones del feed). Después
  * recalcula la racha, lo que a su vez retira los puntos de las semanas que
  * dejan de estar cumplidas.
  */
@@ -215,17 +215,21 @@ export async function deleteTrainingDay(db: PrismaClient, userId: string, rawDat
     }),
   ]);
 
-  // Puntos de asistencia del día (regla retirada: solo quedan los históricos)
+  // Puntos de asistencia del día (los antiguos van por fecha)
   await db.pointEvent.deleteMany({
     where: { userId, type: "ATTENDANCE", meta: { path: ["date"], equals: date.toISOString() } },
   });
-  // Puntos de cada entreno completado
+  // Puntos de cada entreno: series y asistencia (o ambos juntos, en los antiguos)
   for (const w of workouts) {
     await db.pointEvent.deleteMany({
-      where: { userId, type: "WORKOUT_COMPLETED", meta: { path: ["workoutId"], equals: w.id } },
+      where: {
+        userId,
+        type: { in: ["WORKOUT_COMPLETED", "ATTENDANCE"] },
+        meta: { path: ["workoutId"], equals: w.id },
+      },
     });
   }
-  // Puntos de los PRs detectados en esos entrenos (los PRs añadidos a mano se respetan)
+  // Puntos de los PRs detectados en esos entrenos, de cuando aún puntuaban (los PRs añadidos a mano se respetan)
   for (const pr of autoPRs) {
     await db.pointEvent.deleteMany({
       where: {

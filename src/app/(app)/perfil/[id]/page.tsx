@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { format, formatDistanceToNowStrict, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  Flame,
   Trophy,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +22,7 @@ import { Card, Spinner, Avatar, Stat, Badge, Button } from "@/components/ui";
 import { MonthCalendar } from "@/components/month-calendar";
 import { PointsBreakdown } from "@/components/points-breakdown";
 import { AffinityPanel } from "@/components/affinity-panel";
+import { MemberHome } from "@/components/member-home";
 import { cn } from "@/lib/utils";
 import { LEVEL_STYLES } from "@/lib/progress";
 
@@ -67,7 +67,7 @@ export default function PublicProfilePage() {
   const lock = data.progressLock;
 
   return (
-    <div className="space-y-6">
+    <div className="gb-stagger space-y-6">
       <Card className="flex items-center gap-4">
         <Avatar
           name={data.user.name}
@@ -108,16 +108,10 @@ export default function PublicProfilePage() {
         theirProfileEmpty={data.theirProfileEmpty}
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat
-          label="Racha semanal"
-          value={
-            <span className="flex items-center gap-1">
-              {data.user.currentStreak} <Flame className="h-5 w-5 text-orange-400" />
-            </span>
-          }
-          sub={`Mejor: ${data.user.bestStreak} semanas`}
-        />
+      {/* Lo que se ve en Inicio, pero de este miembro: semana, racha, temporada, año y marcas estables */}
+      <MemberHome userId={params.id} name={data.user.name} />
+
+      <div className="grid grid-cols-3 gap-3">
         <Stat label="Asistencias" value={data.attendances} />
         <Stat label="Entrenamientos" value={data.workouts} />
         <Stat label="Puntos históricos" value={data.totalPoints} />
@@ -201,7 +195,7 @@ export default function PublicProfilePage() {
               );
             })}
           </div>
-          <details className="group border-t border-border pt-2">
+          <details className="gb-reveal group border-t border-border pt-2">
             <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted [&::-webkit-details-marker]:hidden">
               Qué significan los colores
               <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
@@ -273,13 +267,11 @@ export default function PublicProfilePage() {
         ) : (
           <div className="space-y-3">
             {data.routines.map((r) => (
-              <details key={r.id} className="group rounded-2xl border border-border bg-surface">
+              <details key={r.id} className="gb-reveal group rounded-2xl border border-border bg-surface">
                 <summary className="flex cursor-pointer list-none items-center justify-between p-4 [&::-webkit-details-marker]:hidden">
                   <div>
                     <p className="font-medium">
-                      {r.emoji} {r.name}
-                      {r.isShared && <Badge className="ml-2 bg-accent/15 text-accent">compartida</Badge>}
-                    </p>
+                      {r.emoji} {r.name}                    </p>
                     <p className="text-xs text-muted">
                       {r.exercises.length} ejercicios
                       {r.estimatedMinutes ? ` · ~${r.estimatedMinutes} min` : ""}

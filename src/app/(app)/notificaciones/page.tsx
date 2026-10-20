@@ -61,7 +61,7 @@ export default function NotificationsPage() {
       ) : notifications?.length === 0 ? (
         <EmptyState icon="🔔" title="Nada por aquí" subtitle="Cuando pase algo en el grupo, lo verás aquí" />
       ) : (
-        <div className="space-y-2">
+        <div className="gb-stagger space-y-2">
           {notifications?.map((n) => (
             <Card key={n.id} className={cn("py-3", !n.read && "border-accent/30 bg-accent/5")}>
               <div className="flex items-start justify-between gap-2">

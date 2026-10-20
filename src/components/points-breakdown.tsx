@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
+import { ChevronDown } from "lucide-react";
 import { api } from "@/trpc/react";
-import { Spinner } from "@/components/ui";
-import { cn, POINT_LABELS } from "@/lib/utils";
+import { CountUp, Spinner } from "@/components/ui";
+import { POINT_CATEGORIES, type CategoryTotals } from "@/lib/points";
 
-type Item = { type: string; points: number; count: number };
+const CATEGORY_EMOJI = Object.fromEntries(POINT_CATEGORIES.map((c) => [c.key, c.emoji]));
 
 /** Cabecera legible de un día: «Hoy», «Ayer» o la fecha completa. */
 function dayLabel(date: Date): string {
@@ -17,79 +18,91 @@ function dayLabel(date: Date): string {
 }
 
 /**
- * Desglose de puntos (para panel y perfiles), en dos lecturas:
- *  - «Por categoría»: en qué se han ganado, sumando todo el histórico.
- *  - «Por fecha»: cuándo se ganaron, día a día del más reciente al más antiguo.
+ * Cartel de puntos (Inicio y perfiles): un cuadro por categoría —Series,
+ * Asistencia, Progreso y Constancia— con sus puntos, y debajo un desplegable
+ * con los puntos obtenidos por fecha.
  *
- * El histórico por fecha se pide solo al abrir esa pestaña: en el panel es
- * información secundaria y no merece una consulta extra en cada carga.
+ * Las categorías vienen ya calculadas en Inicio; en un perfil ajeno se piden
+ * aquí. El histórico por fecha se pide solo al desplegarlo: es información
+ * secundaria y no merece una consulta extra en cada carga.
  */
 export function PointsBreakdown({
-  items,
   total,
   userId,
+  categories,
 }: {
-  items: Item[];
+  /** Desglose por tipo de punto (ya no se usa para pintar: las categorías lo sustituyen). */
+  items?: Array<{ type: string; points: number; count: number }>;
   total: number;
   /** Perfil que se está mirando. Sin valor, el del propio usuario. */
   userId?: string;
+  /** Puntos por categoría, si el llamador ya los tiene. */
+  categories?: CategoryTotals;
 }) {
-  const [tab, setTab] = useState<"categoria" | "fecha">("categoria");
-  const sorted = [...items].filter((i) => i.points !== 0).sort((a, b) => b.points - a.points);
+  const [open, setOpen] = useState(false);
+  const { data } = api.dashboard.pointsByCategory.useQuery({ userId }, { enabled: !categories });
+  const totals = categories ?? data?.categories;
 
-  if (sorted.length === 0) {
+  if (!totals) return <Spinner />;
+  if (total === 0) {
     return <p className="text-sm text-muted">Aún sin puntos. ¡Entrena para sumar! 💪</p>;
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
-        {([["categoria", "Por categoría"], ["fecha", "Por fecha"]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "flex-1 rounded-lg py-1.5 text-xs transition",
-              tab === key ? "bg-accent font-medium text-accent-fg" : "text-muted hover:text-fg",
-            )}
-          >
-            {label}
-          </button>
+      <div className="grid grid-cols-2 gap-2">
+        {POINT_CATEGORIES.map((c) => (
+          <div key={c.key} className="min-w-0 rounded-xl bg-surface-2 p-3" title={c.hint}>
+            <p className="text-xs text-muted">
+              <span aria-hidden>{c.emoji}</span> {c.title}
+            </p>
+            <p className="mt-1 text-xl font-bold leading-none text-accent">
+              <CountUp value={totals[c.key].points} />
+              <span className="ml-1 text-xs font-medium text-muted">pts</span>
+            </p>
+          </div>
         ))}
       </div>
+      <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold">
+        <span>Total</span>
+        <span className="text-accent"><CountUp value={total} /> pts</span>
+      </div>
 
-      {tab === "categoria" ? (
-        <div className="space-y-2">
-          {/* Cuatro anotaciones a la vista; el resto, con scroll */}
-          <div className="max-h-[6.5rem] space-y-2 overflow-y-auto pr-1">
-            {sorted.map((b) => (
-              <div key={b.type} className="flex items-center justify-between text-sm">
-                <span className="text-muted">
-                  {POINT_LABELS[b.type] ?? b.type} <span className="text-muted/70">× {b.count}</span>
-                </span>
-                <span className="font-medium text-accent">+{b.points}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-between border-t border-border pt-2 text-sm font-semibold">
-            <span>Total</span>
-            <span className="text-accent">{total} pts</span>
-          </div>
-        </div>
-      ) : (
-        <PointsTimeline userId={userId} />
-      )}
+      <details
+        className="gb-reveal group rounded-xl border border-border"
+        onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          Puntos por fecha
+          <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border p-3">{open && <PointsTimeline userId={userId} />}</div>
+      </details>
     </div>
   );
 }
 
-/** Historial día a día, con el detalle de cada día desplegado. */
+/** Historial día a día, con el detalle de cada día y su categoría. */
 function PointsTimeline({ userId }: { userId?: string }) {
-  const { data, isLoading } = api.user.pointsHistory.useQuery({ userId, days: 90 });
+  const { data, isLoading } = api.dashboard.pointsHistory.useQuery({ userId, days: 90 });
 
   if (isLoading) return <Spinner />;
   if (!data || data.days.length === 0) {
     return <p className="text-sm text-muted">Sin puntos en los últimos 90 días.</p>;
+  }
+
+  // El servidor agrupa por día UTC; aquí se reagrupa por día local para que un
+  // entreno de madrugada no parta «Hoy» en dos cabeceras
+  const days: Array<{ key: string; date: Date; total: number; lines: (typeof data.days)[number]["lines"] }> = [];
+  for (const line of data.days.flatMap((d) => d.lines)) {
+    const key = format(line.date, "yyyy-MM-dd");
+    let day = days.find((d) => d.key === key);
+    if (!day) {
+      day = { key, date: line.date, total: 0, lines: [] };
+      days.push(day);
+    }
+    day.total += line.points;
+    day.lines.push(line);
   }
 
   return (
@@ -98,18 +111,20 @@ function PointsTimeline({ userId }: { userId?: string }) {
         Últimos {data.sinceDays} días · {data.total} pts
       </p>
       {/* Alto limitado: se ven unas cuantas anotaciones y el resto llega con scroll */}
-      <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
-        {data.days.map((day) => (
+      <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+        {days.map((day) => (
           <div key={day.key} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1">
-              <span className="truncate text-xs font-semibold capitalize">{dayLabel(day.date)}</span>
+              <span className="min-w-0 text-xs font-semibold capitalize">{dayLabel(day.date)}</span>
               <span className="shrink-0 text-xs font-bold text-accent">+{day.total}</span>
             </div>
-            {day.items.map((e) => (
-              <div key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate text-muted">{POINT_LABELS[e.type] ?? e.type}</span>
+            {day.lines.map((l) => (
+              <div key={l.id} className="flex items-start justify-between gap-2 text-sm">
+                <span className="min-w-0 text-muted">
+                  <span aria-hidden>{CATEGORY_EMOJI[l.category]}</span> {l.label}
+                </span>
                 <span className="shrink-0 text-muted">
-                  {format(e.date, "HH:mm")} <span className="font-medium text-accent">+{e.points}</span>
+                  {format(l.date, "HH:mm")} <span className="font-medium text-accent">+{l.points}</span>
                 </span>
               </div>
             ))}

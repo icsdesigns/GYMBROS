@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { subYears } from "date-fns";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { isGroupAdmin, requireGroup } from "@/server/services/group";
+import { requireGroup } from "@/server/services/group";
 import { pushChatMessage } from "@/server/services/chat";
 
 export const chatRouter = createTRPCRouter({
@@ -123,18 +123,15 @@ export const chatRouter = createTRPCRouter({
       return message;
     }),
 
-  // Cada uno puede borrar sus mensajes; el admin del grupo, cualquiera
-  // (los de sistema no tienen autor: solo el admin)
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const message = await ctx.db.chatMessage.findUnique({ where: { id: input.id } });
-    if (!message || message.groupId !== ctx.groupId) throw new TRPCError({ code: "NOT_FOUND" });
-    const isAdmin =
-      ctx.session.user.role === "ADMIN" ||
-      (await isGroupAdmin(ctx.db, ctx.groupId, ctx.session.user.id));
-    if ((message.system || message.userId !== ctx.session.user.id) && !isAdmin) {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
-    await ctx.db.chatMessage.delete({ where: { id: input.id } });
-    return { ok: true };
-  }),
+  // Los mensajes se pueden editar pero no borrar. Solo el autor edita sus mensajes
+  // (los de sistema no tienen autor: nadie los edita).
+  edit: protectedProcedure
+    .input(z.object({ id: z.string(), text: z.string().trim().min(1).max(1000) }))
+    .mutation(async ({ ctx, input }) => {
+      const message = await ctx.db.chatMessage.findUnique({ where: { id: input.id } });
+      if (!message || message.groupId !== ctx.groupId) throw new TRPCError({ code: "NOT_FOUND" });
+      if (message.system || message.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await ctx.db.chatMessage.update({ where: { id: input.id }, data: { text: input.text } });
+      return { ok: true };
+    }),
 });

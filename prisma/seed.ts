@@ -1,4 +1,6 @@
-import { PrismaClient, MuscleGroup, PointType, Rarity } from "@prisma/client";
+import { PrismaClient, MuscleGroup, PointType } from "@prisma/client";
+import { ACHIEVEMENT_CATALOG } from "../src/lib/achievements";
+import { DEFAULT_RULES, RETIRED_RULE_TYPES } from "../src/lib/points";
 
 const prisma = new PrismaClient();
 
@@ -50,36 +52,13 @@ const NO_WEIGHT: string[] = [
   "Cinta de correr", "Bicicleta estática", "Elíptica", "Remo (máquina)", "Comba", "Escaladora",
 ];
 
-const POINT_RULES: Array<{ type: PointType; name: string; points: number }> = [
-  // Por serie realizada (si no se marcó ninguna, por serie de la sesión), más
-  // 5 fijos por haber entrenado (WORKOUT_BONUS_POINTS, en gamification.ts)
-  { type: "WORKOUT_COMPLETED", name: "Entrenamiento completado (por serie, +5 por entrenar)", points: 1 },
-  { type: "NEW_PR", name: "Nuevo PR", points: 15 },
-  { type: "STREAK_WEEK1", name: "Racha: 1 semana cumplida", points: 15 },
-  { type: "STREAK_WEEK2", name: "Racha: 2 semanas seguidas", points: 25 },
-  { type: "STREAK_WEEK3", name: "Racha: 3 semanas seguidas", points: 35 },
-  { type: "STREAK_MONTH", name: "Racha: 1 mes seguido", points: 45 },
-  { type: "STREAK_CRACK", name: "Crack: semana extra tras 1 mes", points: 45 },
-];
+// Sistema de puntos en cuatro categorías (Series, Asistencia, Progreso y
+// Constancia): las reglas por defecto viven en src/lib/points.ts. Los PR ya no
+// puntúan (su regla se retira, los puntos concedidos se conservan).
+const POINT_RULES = DEFAULT_RULES as Array<{ type: PointType; name: string; points: number }>;
 
-const ACHIEVEMENTS: Array<{ code: string; name: string; description: string; icon: string; rarity: Rarity }> = [
-  // Uno por cada regla del sistema de puntos
-  { code: "FIRST_ATTENDANCE", name: "Primera asistencia", description: "Registra tu primer día de gimnasio", icon: "📍", rarity: "COMUN" },
-  { code: "ATTENDANCE_25", name: "25 asistencias", description: "Ve al gimnasio 25 veces", icon: "🎽", rarity: "RARO" },
-  { code: "SHARE_FIRST", name: "Espíritu de equipo", description: "Comparte con el grupo tu primera rutina creada", icon: "🤝", rarity: "COMUN" },
-  { code: "STREAK_WEEK", name: "Primera semana cumplida", description: "Cumple tu plan semanal por primera vez", icon: "✅", rarity: "COMUN" },
-  { code: "STREAK_CRACK", name: "Modo crack", description: "Supera el mes cumpliendo tu plan (5+ semanas seguidas)", icon: "💎", rarity: "EPICO" },
-  { code: "FIRST_WORKOUT", name: "Primer entrenamiento", description: "Completa tu primer entrenamiento", icon: "🎯", rarity: "COMUN" },
-  { code: "WORKOUTS_10", name: "10 entrenamientos", description: "Completa 10 entrenamientos", icon: "🔟", rarity: "COMUN" },
-  { code: "WORKOUTS_100", name: "100 entrenamientos", description: "Completa 100 entrenamientos", icon: "💯", rarity: "EPICO" },
-  { code: "FIRST_PR", name: "Primer PR", description: "Registra tu primer récord personal", icon: "🏋️", rarity: "COMUN" },
-  { code: "PR_10", name: "10 PRs", description: "Consigue 10 récords personales", icon: "📈", rarity: "RARO" },
-  { code: "STREAK_7", name: "Racha de 1 mes", description: "Cumple tu plan 4 semanas seguidas", icon: "🔥", rarity: "RARO" },
-  { code: "STREAK_30", name: "Racha de 6 meses", description: "Cumple tu plan 26 semanas seguidas", icon: "🌋", rarity: "LEGENDARIO" },
-  { code: "VOLUME_1000", name: "1.000 kg levantados", description: "Acumula 1.000 kg de volumen total", icon: "🏗️", rarity: "COMUN" },
-  { code: "VOLUME_10000", name: "10.000 kg levantados", description: "Acumula 10.000 kg de volumen total", icon: "🚛", rarity: "EPICO" },
-  { code: "ATTENDANCE_100", name: "100 asistencias", description: "Ve al gimnasio 100 veces", icon: "🏛️", rarity: "EPICO" },
-];
+// Catálogo de logros: fuente única en src/lib/achievements.ts
+const ACHIEVEMENTS = ACHIEVEMENT_CATALOG.map(({ number: _number, retired: _retired, ...a }) => a);
 
 const NOTIFICATION_TEMPLATES: Array<{ code: string; title: string; body: string }> = [
   { code: "REMINDER_WEEK_LEFT", title: "¡Te queda 1 día para cumplir tu semana! 🎯", body: "Un entreno más y mantienes la racha." },
@@ -90,15 +69,11 @@ const NOTIFICATION_TEMPLATES: Array<{ code: string; title: string; body: string 
 ];
 
 async function main() {
-  // Retirar reglas de puntos legadas. "Ir al gimnasio" y "Compartir rutina"
-  // salieron del sistema: los puntos ya otorgados se conservan, pero la regla
-  // desaparece del panel de admin y no vuelve a dar puntos.
+  // Retirar reglas de puntos legadas. "Compartir rutina", las rachas de 7 días
+  // y los PR salieron del sistema: los puntos ya otorgados se conservan, pero
+  // la regla desaparece del panel de admin y no vuelve a dar puntos.
   await prisma.pointRule.deleteMany({
-    where: {
-      type: {
-        in: ["STREAK_7", "WEEKLY_TARGET", "GOAL_COMPLETED", "ATTENDANCE", "ROUTINE_SHARED"],
-      },
-    },
+    where: { type: { in: [...RETIRED_RULE_TYPES] } },
   });
 
   for (const [name, muscleGroup] of CATALOG) {
@@ -117,10 +92,14 @@ async function main() {
     where: { type: "WORKOUT_COMPLETED", name: "Completar rutina" },
     data: { name: "Completar rutina (por serie)", points: 1 },
   });
-  // Y después cambió de nombre a "Entrenamiento completado" (los puntos se respetan)
+  // Después pasó a "Series realizadas": los 5 puntos por entrenar son ahora la
+  // regla de Asistencia (los puntos se respetan)
   await prisma.pointRule.updateMany({
-    where: { type: "WORKOUT_COMPLETED", name: "Completar rutina (por serie)" },
-    data: { name: "Entrenamiento completado (por serie, +5 por entrenar)" },
+    where: {
+      type: "WORKOUT_COMPLETED",
+      name: { in: ["Completar rutina (por serie)", "Entrenamiento completado (por serie, +5 por entrenar)"] },
+    },
+    data: { name: "Series realizadas (por serie)" },
   });
 
   for (const rule of POINT_RULES) {

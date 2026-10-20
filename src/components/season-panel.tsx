@@ -4,6 +4,7 @@ import Link from "next/link";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Trophy, ChevronRight, Swords } from "lucide-react";
+import { CountUp } from "@/components/ui";
 
 /**
  * Periodo de una temporada en formato compacto: "15 ago – 14 nov · quedan 33 días".
@@ -46,7 +47,7 @@ type Season = {
 };
 
 /** Una cifra del marcador de temporada. */
-function Score({ value, label, className }: { value: string; label: string; className?: string }) {
+function Score({ value, label, className }: { value: React.ReactNode; label: string; className?: string }) {
   return (
     <div className="flex-1 rounded-xl border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 text-center">
       <p className={`text-xl font-black leading-none text-amber-300 ${className ?? ""}`}>{value}</p>
@@ -63,7 +64,7 @@ export function SeasonPanel({ season }: { season: Season }) {
   const started = season.started;
 
   return (
-    <Link href="/comunidad?tab=ranking&periodo=season" className="group block h-full">
+    <Link href="/comunidad?tab=ranking&periodo=season" className="gb-press group block h-full">
       <div className="relative flex h-full flex-col justify-center gap-3 overflow-hidden rounded-2xl border border-gold/40 bg-[#0d0b06] p-3.5 transition-all duration-300 hover:border-gold/70 hover:shadow-[0_0_28px_-6px_rgba(251,191,36,0.45)]">
         {/* Fondo: resplandor y rejilla sutil */}
         <div
@@ -112,12 +113,12 @@ export function SeasonPanel({ season }: { season: Season }) {
           {started ? (
             <>
               <Score
-                value={String(season.myPoints)}
+                value={<CountUp value={season.myPoints} />}
                 label="tus puntos"
                 className="[text-shadow:0_0_14px_rgba(251,191,36,0.5)]"
               />
               <Score value={season.position ? `#${season.position}` : "—"} label="tu puesto" />
-              <Score value={String(season.daysLeft)} label="días" />
+              <Score value={<CountUp value={season.daysLeft} duration={500} />} label="días" />
             </>
           ) : (
             <Score value={String(season.daysLeft)} label="días para empezar" />

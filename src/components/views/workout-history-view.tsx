@@ -13,7 +13,7 @@ import { WorkoutIncidentModal } from "@/components/workout-incident-modal";
 
 /**
  * Historial de entrenamientos: cada sesión terminada, desplegable, con sus
- * series. Desde aquí también se borra un día completo (entreno, puntos, PRs
+ * series. Se ven las 3 últimas; el resto queda plegado hasta pulsar «Ver todos». Desde aquí también se borra un día completo (entreno, puntos, PRs
  * automáticos y publicaciones que generó), que es la única vía que queda tras
  * retirar el apartado de asistencia.
  *
@@ -22,16 +22,20 @@ import { WorkoutIncidentModal } from "@/components/workout-incident-modal";
  * la marca estable. Los ejercicios sin peso no entran: el semáforo habla de
  * subir o bajar kilos.
  */
+/** Sesiones que se ven con el panel plegado. */
+const VISIBLE_WHEN_FOLDED = 3;
+
 export function WorkoutHistoryView() {
   const utils = api.useUtils();
   const [dayDetail, setDayDetail] = useState<Date | null>(null);
   // Sesión sobre la que se está abriendo una incidencia
   const [incident, setIncident] = useState<string | null>(null);
   const [legendOpen, setLegendOpen] = useState(false);
-  // Plegado por defecto; solo se recuerda mientras la pantalla está montada
+  // Solo las `VISIBLE_WHEN_FOLDED` últimas por defecto; solo se recuerda mientras la pantalla está montada
   const [open, setOpen] = useState(false);
-  // Mientras está plegado no se pide el historial (con datos ya cargados, plegar no los descarta)
-  const { data: workouts, isLoading } = api.workout.history.useQuery({ limit: 30 }, { enabled: open });
+  const { data: workouts, isLoading } = api.workout.history.useQuery({ limit: 30 });
+  const hiddenCount = Math.max(0, (workouts?.length ?? 0) - VISIBLE_WHEN_FOLDED);
+  const shown = open ? workouts : workouts?.slice(0, VISIBLE_WHEN_FOLDED);
   const { data: day, isFetching: dayLoading } = api.attendance.day.useQuery(
     { date: dayDetail ?? new Date() },
     { enabled: dayDetail !== null },
@@ -52,23 +56,7 @@ export function WorkoutHistoryView() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        {/* El botón de info es hermano (no hijo) del que pliega: no se anidan botones.
-            El botón va dentro del título (y no al revés): un h2 no puede ir dentro de un botón */}
-        <h2 className="min-w-0 flex-1 text-xl font-bold">
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-expanded={open}
-            aria-controls="workout-history-list"
-            className="flex w-full items-center gap-2 text-left"
-          >
-            <span className="truncate">Historial de entrenamientos</span>
-            <ChevronDown
-              aria-hidden
-              className={cn("h-5 w-5 shrink-0 text-muted transition-transform", open && "rotate-180")}
-            />
-          </button>
-        </h2>
+        <h2 className="min-w-0 flex-1 truncate text-xl font-bold">Historial de entrenamientos</h2>
         <button
           onClick={() => setLegendOpen(true)}
           aria-label="Qué significan los colores de las series"
@@ -79,8 +67,8 @@ export function WorkoutHistoryView() {
         </button>
       </div>
 
-      <div id="workout-history-list" hidden={!open} className="space-y-3">
-        {!open ? null : isLoading ? (
+      <div id="workout-history-list" className="gb-stagger space-y-3">
+        {isLoading ? (
           <Spinner />
         ) : workouts?.length === 0 ? (
           <EmptyState
@@ -89,8 +77,8 @@ export function WorkoutHistoryView() {
             subtitle="Cuando termines tu primera sesión aparecerá aquí"
           />
         ) : (
-          workouts?.map((w) => (
-            <details key={w.id} className="group rounded-2xl border border-border bg-surface">
+          shown?.map((w) => (
+            <details key={w.id} className="gb-reveal group rounded-2xl border border-border bg-surface">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
                 <div className="min-w-0">
                   <p className="truncate font-medium">
@@ -177,6 +165,18 @@ export function WorkoutHistoryView() {
               </div>
             </details>
           ))
+        )}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-controls="workout-history-list"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2 text-sm text-muted transition hover:border-accent/50 hover:text-accent"
+          >
+            {open ? "Ver solo los 3 últimos" : `Ver todos (+${hiddenCount})`}
+            <ChevronDown aria-hidden className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+          </button>
         )}
       </div>
 

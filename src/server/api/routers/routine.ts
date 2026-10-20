@@ -3,8 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { MuscleGroup } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { MAX_WORKOUT_MS } from "@/server/services/workout-service";
-import { addFeed, checkAchievements } from "@/server/services/gamification";
 import { syncWeeklyTarget } from "@/server/services/weekly-target";
+import { groupMemberIds } from "@/server/services/group";
 
 const routineExerciseInput = z.object({
   exerciseId: z.string(),
@@ -61,9 +61,7 @@ export const routineRouter = createTRPCRouter({
       },
     });
     if (!routine) throw new TRPCError({ code: "NOT_FOUND" });
-    if (routine.userId !== ctx.session.user.id && !routine.isShared) {
-      throw new TRPCError({ code: "FORBIDDEN" });
-    }
+    // Las rutinas del grupo son públicas para cualquier usuario autenticado
     // Los pesos son privados: se ocultan si la rutina no es tuya
     if (routine.userId !== ctx.session.user.id) {
       return {
@@ -222,20 +220,6 @@ export const routineRouter = createTRPCRouter({
     }));
   }),
 
-  toggleShare: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const routine = await assertOwner(ctx.db, input.id, ctx.session.user.id);
-    const updated = await ctx.db.routine.update({
-      where: { id: input.id },
-      data: { isShared: !routine.isShared },
-    });
-    if (updated.isShared && !routine.isShared) {
-      const user = await ctx.db.user.findUnique({ where: { id: ctx.session.user.id }, select: { name: true } });
-      await addFeed(ctx.db, ctx.session.user.id, "ROUTINE_SHARED", `${user?.name} compartió la rutina ${updated.emoji} ${updated.name}`);
-      await checkAchievements(ctx.db, ctx.session.user.id);
-    }
-    return updated;
-  }),
-
   // Importar una rutina desde un archivo JSON exportado
   importRoutine: protectedProcedure
     .input(
@@ -307,10 +291,12 @@ export const routineRouter = createTRPCRouter({
       return imported;
     }),
 
-  // Rutinas compartidas por el resto del grupo (sin pesos: son privados)
+  // Rutinas del resto del grupo activo, públicas por defecto (sin pesos: son privados)
   shared: protectedProcedure.query(async ({ ctx }) => {
+    const memberIds = (await groupMemberIds(ctx.db, ctx.groupId)).filter((id) => id !== ctx.session.user.id);
+    if (memberIds.length === 0) return [];
     const routines = await ctx.db.routine.findMany({
-      where: { isShared: true, userId: { not: ctx.session.user.id } },
+      where: { userId: { in: memberIds } },
       include: {
         user: { select: { id: true, name: true, avatarUrl: true } },
         exercises: { include: { exercise: true }, orderBy: { order: "asc" } },
@@ -323,15 +309,13 @@ export const routineRouter = createTRPCRouter({
     }));
   }),
 
-  // Clonar la rutina compartida de otro usuario
+  // Clonar la rutina de otro usuario (las rutinas del grupo son públicas)
   clone: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const original = await ctx.db.routine.findUnique({
       where: { id: input.id },
       include: { exercises: true, user: { select: { name: true } } },
     });
-    if (!original || (!original.isShared && original.userId !== ctx.session.user.id)) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Esta rutina no está compartida" });
-    }
+    if (!original) throw new TRPCError({ code: "NOT_FOUND", message: "Rutina no encontrada" });
     const cloned = await ctx.db.routine.create({
       data: {
         userId: ctx.session.user.id,

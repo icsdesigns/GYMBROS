@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import {
   startOfDay, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth,
   subYears, differenceInCalendarMonths,
@@ -8,7 +10,8 @@ import { weekStreakState } from "@/server/services/streak";
 import { reconcilePlan } from "@/server/services/plan-service";
 import { seasonAt } from "@/server/services/season";
 import { groupMemberIds } from "@/server/services/group";
-import { WORKOUT_BONUS_POINTS } from "@/server/services/gamification";
+import { ensureDefaultRules, pointsByCategory, pointsHistoryByDay } from "@/server/services/points";
+import { RULE_INFO } from "@/lib/points";
 import { computeStableMarks } from "@/lib/stable-mark";
 
 export const dashboardRouter = createTRPCRouter({
@@ -62,6 +65,8 @@ export const dashboardRouter = createTRPCRouter({
       count: g._count,
     }));
     const totalPoints = pointsBreakdown.reduce((acc, b) => acc + b.points, 0);
+    // Lo mismo agrupado en las cuatro categorías del cartel de Inicio
+    const { categories: pointsCategories } = await pointsByCategory(ctx.db, userId);
 
     // Puntos configurados de las etapas de racha
     const streakRulesRaw = await ctx.db.pointRule.findMany({
@@ -113,6 +118,7 @@ export const dashboardRouter = createTRPCRouter({
       // Inicio lo usa como límite para navegar a meses anteriores.
       firstAttendanceDate: firstAttendance?.date ?? null,
       pointsBreakdown,
+      pointsCategories,
       totalPoints,
       streakRules,
       season: {
@@ -174,16 +180,63 @@ export const dashboardRouter = createTRPCRouter({
 
   /**
    * Esquema del sistema de puntos para el botón de información de Inicio: las
-   * reglas automáticas activas con sus valores reales (los que fija el admin).
+   * reglas activas con sus valores reales (los que fija el admin), por categoría.
    */
   pointRules: protectedProcedure.query(async ({ ctx }) => {
+    await ensureDefaultRules(ctx.db);
+    // Filtrado aquí y no con un IN: un tipo que aún no exista en el enum de la
+    // base de datos (p. ej. PROGRESS_WEEKLY sin migrar) haría fallar la consulta
     const rules = await ctx.db.pointRule.findMany({
       where: { type: { not: null }, enabled: true },
       select: { type: true, points: true },
     });
     return {
-      rules: rules.map((r) => ({ type: r.type as string, points: r.points })),
-      workoutBonus: WORKOUT_BONUS_POINTS,
+      rules: rules
+        .filter((r) => r.type && RULE_INFO[r.type])
+        .map((r) => ({ type: r.type as string, points: r.points })),
     };
   }),
+
+  /** Puntos de un miembro (por defecto, uno mismo) repartidos en las cuatro categorías. */
+  pointsByCategory: protectedProcedure
+    .input(z.object({ userId: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const userId = await visibleUserId(ctx, input?.userId);
+      return pointsByCategory(ctx.db, userId);
+    }),
+
+  /** Puntos por fecha, agrupados por día y con su categoría. */
+  pointsHistory: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().optional(), // por defecto, uno mismo
+        days: z.number().int().min(1).max(365).default(90),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = await visibleUserId(ctx, input.userId);
+      return pointsHistoryByDay(ctx.db, userId, input.days);
+    }),
+
+  /** Logros que ya tiene el usuario (el catálogo completo vive en lib/achievements). */
+  achievements: protectedProcedure.query(async ({ ctx }) => {
+    const earned = await ctx.db.userAchievement.findMany({
+      where: { userId: ctx.session.user.id },
+      select: { earnedAt: true, achievement: { select: { code: true } } },
+    });
+    return earned.map((e) => ({ code: e.achievement.code, earnedAt: e.earnedAt }));
+  }),
 });
+
+/** Un perfil ajeno solo se ve desde dentro: hay que compartir grupo con él (o ser uno mismo). */
+async function visibleUserId(
+  ctx: { db: Parameters<typeof groupMemberIds>[0]; groupId: Parameters<typeof groupMemberIds>[1]; session: { user: { id: string } } },
+  requested?: string,
+): Promise<string> {
+  if (!requested || requested === ctx.session.user.id) return ctx.session.user.id;
+  const memberIds = await groupMemberIds(ctx.db, ctx.groupId);
+  if (!memberIds.includes(requested)) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Ese perfil no está en tu grupo" });
+  }
+  return requested;
+}

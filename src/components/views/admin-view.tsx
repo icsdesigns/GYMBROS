@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { Shield, Trash2, Megaphone, MessageSquare, Check, Undo2, BarChart3, Eye, Plus, Lock, LockOpen, MailPlus, ChevronDown, Send, Users, Sparkles, KeyRound, BellRing, BellOff } from "lucide-react";
+import { Shield, Trash2, Megaphone, MessageSquare, Check, Undo2, BarChart3, Eye, Plus, Lock, LockOpen, MailPlus, ChevronDown, Send, Users, Sparkles, KeyRound, BellRing, BellOff, Award } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Button, Card, Input, Label, Spinner, Badge, Modal } from "@/components/ui";
 import { PollAnswerCard } from "@/components/poll-card";
 import { cn } from "@/lib/utils";
+import { POINT_CATEGORIES, RULE_INFO } from "@/lib/points";
+import { ACHIEVEMENT_CATALOG, ACHIEVEMENT_SUGGESTIONS } from "@/lib/achievements";
 
 
 /**
@@ -60,7 +62,7 @@ function PushStatus({
 /** Sección plegable del panel de administración (cerrada por defecto). */
 function AdminSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <details className="group rounded-2xl border border-border bg-surface">
+    <details className="gb-reveal group rounded-2xl border border-border bg-surface">
       <summary className="flex cursor-pointer list-none items-center justify-between p-4 [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2 font-semibold">{icon} {title}</span>
         <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
@@ -193,48 +195,115 @@ export function AdminView() {
       <AdminSection icon={<BarChart3 className="h-4 w-4" />} title="Sistema de puntos">
         <div className="space-y-1">
           <p className="text-xs text-muted">
-            Cada regla se otorga automáticamente. Puedes cambiar los puntos o desactivarlas.
+            Cada regla se otorga automáticamente. Puedes cambiar los puntos o desactivarlas. Los puntos
+            ya concedidos no se tocan.
           </p>
         </div>
-        <div className="space-y-2">
-          {rules?.map((r) => (
-            <div
-              key={r.id}
-              className={cn(
-                "flex items-center justify-between gap-3 rounded-xl bg-surface-2 p-2.5",
-                !r.enabled && "opacity-50",
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <button
-                  title={r.enabled ? "Desactivar" : "Activar"}
-                  onClick={() => updateRule.mutate({ id: r.id, enabled: !r.enabled })}
-                  className={cn(
-                    "h-5 w-9 shrink-0 rounded-full p-0.5 transition",
-                    r.enabled ? "bg-accent" : "bg-border",
-                  )}
-                >
-                  <span
+        {POINT_CATEGORIES.map((cat) => {
+          const list = (rules ?? [])
+            .filter((r) => r.type && RULE_INFO[r.type]?.category === cat.key)
+            .sort((x, y) => RULE_INFO[x.type!]!.order - RULE_INFO[y.type!]!.order);
+          if (list.length === 0) return null;
+          return (
+            <div key={cat.key} className="space-y-2">
+              <h3 className="text-sm font-semibold">
+                {cat.emoji} {cat.title}
+              </h3>
+              {list.map((r) => {
+                const info = RULE_INFO[r.type!]!;
+                return (
+                  <div
+                    key={r.id}
                     className={cn(
-                      "block h-4 w-4 rounded-full bg-bg transition-transform",
-                      r.enabled && "translate-x-4",
+                      "flex items-start justify-between gap-3 rounded-xl bg-surface-2 p-2.5",
+                      !r.enabled && "opacity-50",
                     )}
-                  />
-                </button>
-                <span className="truncate text-sm">{r.name}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Input
-                  type="number" min={0} defaultValue={r.points} className="h-8 w-20 text-center"
-                  onBlur={(e) => {
-                    const v = +e.target.value;
-                    if (v !== r.points && v >= 0) updateRule.mutate({ id: r.id, points: v });
-                  }}
-                />
-                <span className="text-xs text-muted">pts</span>
-              </div>
+                  >
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                      <button
+                        title={r.enabled ? "Desactivar" : "Activar"}
+                        onClick={() => updateRule.mutate({ id: r.id, enabled: !r.enabled })}
+                        className={cn(
+                          "mt-0.5 h-5 w-9 shrink-0 rounded-full p-0.5 transition",
+                          r.enabled ? "bg-accent" : "bg-border",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "block h-4 w-4 rounded-full bg-bg transition-transform",
+                            r.enabled && "translate-x-4",
+                          )}
+                        />
+                      </button>
+                      {/* Sin truncar: el nombre y su explicación se leen enteros, con saltos de línea */}
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm leading-snug">{info.label}</p>
+                        {info.hint && <p className="mt-0.5 break-words text-xs text-muted">{info.hint}</p>}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-0.5">
+                      <Input
+                        type="number" min={0} defaultValue={r.points} className="h-8 w-20 text-center"
+                        onBlur={(e) => {
+                          const v = +e.target.value;
+                          if (v !== r.points && v >= 0) updateRule.mutate({ id: r.id, points: v });
+                        }}
+                      />
+                      <span className="max-w-[6rem] text-right text-[11px] leading-tight text-muted">
+                        {info.unit ?? "pts"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          );
+        })}
+      </AdminSection>
+
+      {/* Logros: catálogo activo y sugerencias, con numeración continua */}
+      <AdminSection icon={<Award className="h-4 w-4" />} title="Logros">
+        <p className="text-xs text-muted">
+          Catálogo activo, numerado para poder referirse a cada logro por su número. Vive en{" "}
+          <code className="text-fg">src/lib/achievements.ts</code>.
+        </p>
+        <ul className="space-y-2">
+          {ACHIEVEMENT_CATALOG.map((a) => (
+            <li key={a.code} className="flex items-start gap-2 rounded-xl bg-surface-2 p-2.5">
+              <span className="w-7 shrink-0 text-right text-sm font-bold text-accent">{a.number}.</span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium leading-snug">
+                  {a.icon} {a.name}{" "}
+                  <span className="text-[11px] font-normal uppercase tracking-wide text-muted">{a.rarity}</span>
+                  {a.retired && (
+                    <span className="ml-1.5 text-[11px] font-normal uppercase tracking-wide text-muted">· Retirado</span>
+                  )}
+                </p>
+                <p className="break-words text-xs text-muted">{a.description}</p>
+              </div>
+            </li>
           ))}
+        </ul>
+
+        <div className="space-y-2 border-t border-border pt-3">
+          <h3 className="text-sm font-semibold">Sugerencias a largo plazo</h3>
+          <p className="text-xs text-muted">
+            Ideas aún sin implementar (no se otorgan). La numeración continúa la del catálogo.
+          </p>
+          <ul className="space-y-2">
+            {ACHIEVEMENT_SUGGESTIONS.map((a) => (
+              <li key={a.number} className="flex items-start gap-2 rounded-xl border border-dashed border-border p-2.5">
+                <span className="w-7 shrink-0 text-right text-sm font-bold text-muted">{a.number}.</span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-medium leading-snug">
+                    {a.icon} {a.name}{" "}
+                    <span className="text-[11px] font-normal uppercase tracking-wide text-muted">{a.rarity}</span>
+                  </p>
+                  <p className="break-words text-xs text-muted">{a.description}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       </AdminSection>
 

@@ -60,7 +60,7 @@ function TrainingContent() {
             key={key}
             onClick={() => router.replace(`/entrenamiento?tab=${key}`, { scroll: false })}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm transition",
+              "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm transition motion-safe:active:scale-[0.97]",
               tab === key ? "bg-accent font-medium text-accent-fg" : "text-muted hover:text-fg",
             )}
           >
@@ -70,9 +70,9 @@ function TrainingContent() {
         ))}
       </div>
 
-      {visited.has("rutinas") && <div className={tab === "rutinas" ? "" : "hidden"}><RoutinesPlanView /></div>}
-      {visited.has("progreso") && <div className={tab === "progreso" ? "" : "hidden"}><ProgressView /></div>}
-      {visited.has("prs") && <div className={tab === "prs" ? "" : "hidden"}><PRsView /></div>}
+      {visited.has("rutinas") && <div className={tab === "rutinas" ? "gb-tab-panel" : "hidden"}><RoutinesPlanView /></div>}
+      {visited.has("progreso") && <div className={tab === "progreso" ? "gb-tab-panel" : "hidden"}><ProgressView /></div>}
+      {visited.has("prs") && <div className={tab === "prs" ? "gb-tab-panel" : "hidden"}><PRsView /></div>}
     </div>
   );
 }

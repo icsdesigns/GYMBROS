@@ -97,10 +97,10 @@ export function GroupView() {
         )}
       </Card>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="gb-stagger grid grid-cols-2 gap-3">
         {users?.map((u) => (
           <Link key={u.id} href={"/perfil/" + u.id}>
-            <Card className="flex h-full items-center gap-3 transition hover:border-accent/40">
+            <Card pressable className="flex h-full items-center gap-3 transition hover:border-accent/40">
               {/* El contorno lleva el color del progreso general de su rutina */}
               <Avatar
                 name={u.name}

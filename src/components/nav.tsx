@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Dumbbell, Users, Building2, Bell, Settings, AlertTriangle, MessageCircle } from "lucide-react";
+import { LayoutDashboard, Dumbbell, Users, Building2, Bell, Settings, AlertTriangle, MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/trpc/react";
 import { Logo } from "@/components/logo";
@@ -15,6 +15,26 @@ const NAV = [
   { href: "/inversion", label: "Gym", icon: Building2, match: /^\/inversion/ },
   { href: "/ajustes", label: "Ajustes", icon: Settings, match: /^\/(ajustes|admin)/ },
 ];
+
+/**
+ * Icono del chat del grupo: burbuja de conversación con fondo tintado y, si hay
+ * mensajes sin leer, una alerta (badge) con su número pegada al icono.
+ */
+function ChatIcon({ unread, className }: { unread: number; className?: string }) {
+  return (
+    <span className={cn("relative inline-flex", className)}>
+      <MessagesSquare className="h-5 w-5" />
+      {unread > 0 && (
+        <span
+          aria-label={`${unread} mensajes sin leer`}
+          className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-accent-fg ring-2 ring-bg"
+        >
+          {unread > 99 ? "99+" : unread}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /** Estado compartido de la navegación: apartados y alerta del gimnasio. */
 function useNavState() {
@@ -40,7 +60,7 @@ export function Sidebar() {
   const withNotifications = [
     ...items.slice(0, items.length - 1),
     { href: "/notificaciones", label: "Notificaciones", icon: Bell, match: /^\/notificaciones/ },
-    { href: "/comunidad?tab=chat", label: "Chat", icon: MessageCircle, match: /^\/__nunca__/ },
+    { href: "/comunidad?tab=chat", label: "Chat", icon: MessagesSquare, match: /^\/__nunca__/ },
     ...items.slice(items.length - 1),
   ];
 
@@ -58,22 +78,22 @@ export function Sidebar() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
+              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition motion-safe:active:scale-[0.97]",
               match.test(pathname)
                 ? "bg-accent/10 font-medium text-accent"
                 : "text-muted hover:bg-surface-2 hover:text-fg",
             )}
           >
-            <Icon className="h-4 w-4" />
+            {href === "/comunidad?tab=chat" ? (
+              // El número de sin leer va pegado al icono (no al final de la fila)
+              <ChatIcon unread={unreadChat ?? 0} className="[&>svg]:h-4 [&>svg]:w-4" />
+            ) : (
+              <Icon className="h-4 w-4" />
+            )}
             {label}
             {href === "/notificaciones" && (unread ?? 0) > 0 && (
               <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
                 {unread}
-              </span>
-            )}
-            {href === "/comunidad?tab=chat" && (unreadChat ?? 0) > 0 && (
-              <span className="ml-auto rounded-full bg-accent px-1.5 text-xs font-bold text-accent-fg">
-                {unreadChat}
               </span>
             )}
             {href === "/inversion" && investmentAlert && (
@@ -97,7 +117,7 @@ export function BottomNav() {
           key={href}
           href={href}
           className={cn(
-            "flex flex-1 flex-col items-center gap-0.5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-[10px]",
+            "gb-press flex flex-1 flex-col items-center gap-0.5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-[10px]",
             match.test(pathname) ? "text-accent" : "text-muted",
           )}
         >
@@ -135,11 +155,12 @@ export function MobileHeader() {
       <div className="flex shrink-0 items-center gap-1">
         {/* Entreno en curso: compacto, entre el logo y los iconos */}
         <ActiveWorkoutChip variant="header" className="mr-1" />
-        <Link href="/comunidad?tab=chat" className="relative rounded-full p-2 text-muted hover:text-fg" aria-label="Chat del grupo">
-          <MessageCircle className="h-5 w-5" />
-          {(unreadChat ?? 0) > 0 && (
-            <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent" />
-          )}
+        <Link
+          href="/comunidad?tab=chat"
+          className="rounded-full bg-accent/10 p-2 text-accent transition hover:bg-accent/20"
+          aria-label={(unreadChat ?? 0) > 0 ? `Chat del grupo, ${unreadChat} sin leer` : "Chat del grupo"}
+        >
+          <ChatIcon unread={unreadChat ?? 0} />
         </Link>
         <Link href="/notificaciones" className="relative rounded-full p-2 text-muted hover:text-fg" aria-label="Notificaciones">
           <Bell className="h-5 w-5" />

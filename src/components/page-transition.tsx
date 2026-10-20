@@ -11,7 +11,8 @@ import { usePathname } from "next/navigation";
  * cargador llegaba tarde y tapaba un contenido que estaba listo desde el
  * principio, de ahí el parpadeo «contenido → cargador → contenido».
  *
- * Ahora la transición es solo un fundido de entrada: si la pantalla está lista
+ * Ahora la transición es solo un fundido de entrada (fill-mode `backwards`: al
+ * terminar no deja ninguna capa de composición sobre toda la pantalla): si la pantalla está lista
  * al momento, no se ve ningún cargador. Cuando la navegación sí tarda de
  * verdad, quien muestra el cargador es el `loading.tsx` de la ruta, que es el
  * único que conoce el estado real de la carga.
@@ -25,7 +26,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       {children}
       <style jsx>{`
         .gb-page {
-          animation: gb-page-in 0.22s ease-out both;
+          animation: gb-page-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) backwards;
         }
         @keyframes gb-page-in {
           from { opacity: 0; transform: translateY(6px); }

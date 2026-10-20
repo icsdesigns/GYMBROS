@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus, Crown } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Crown, Dumbbell } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Card, Spinner, Avatar, Badge } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,6 @@ import { LEVEL_STYLES } from "@/lib/progress";
 import { seasonPeriodLabel } from "@/components/season-panel";
 
 const PERIODS = [
-  { key: "week", label: "Semana" },
   { key: "month", label: "Mes" },
   { key: "season", label: "Temporada" },
   { key: "year", label: "Año" },
@@ -20,7 +19,8 @@ const PERIODS = [
 
 const POINT_LABELS: Record<string, string> = {
   ATTENDANCE: "Asistencias (legado)",
-  WORKOUT_COMPLETED: "Entrenamientos completados",
+  WORKOUT_COMPLETED: "Series realizadas",
+  PROGRESS_WEEKLY: "Progreso semanal",
   NEW_PR: "Nuevos PRs",
   STREAK_7: "Rachas de 7 días",
   ROUTINE_SHARED: "Rutinas compartidas (legado)",
@@ -37,7 +37,7 @@ type Period = (typeof PERIODS)[number]["key"];
 
 export function RankingView() {
   const params = useSearchParams();
-  const [period, setPeriod] = useState<Period>("week");
+  const [period, setPeriod] = useState<Period>("month");
 
   // Permite entrar directamente a un periodo concreto, p. ej. desde el panel
   // de temporada de Inicio: /comunidad?tab=ranking&periodo=season
@@ -69,7 +69,7 @@ export function RankingView() {
               key={p.key}
               onClick={() => setPeriod(p.key)}
               className={cn(
-                "flex-1 rounded-lg px-3 py-1.5 text-sm transition",
+                "flex-1 rounded-lg px-3 py-1.5 text-sm transition motion-safe:active:scale-[0.97]",
                 period === p.key ? "bg-accent font-medium text-accent-fg" : "text-muted hover:text-fg",
               )}
             >
@@ -154,7 +154,10 @@ export function RankingView() {
           )}
 
           {/* Tabla completa */}
-          <Card className="divide-y divide-border p-0">
+          <p className="-mb-3 flex items-center gap-1 text-xs text-muted">
+            <Dumbbell className="h-3 w-3" aria-hidden /> = veces que ha entrenado cada uno esta semana
+          </p>
+          <Card className="gb-stagger divide-y divide-border p-0">
             {data.rows.map((row) => (
               <div
                 key={row.user.id}
@@ -175,6 +178,15 @@ export function RankingView() {
                     )}
                   </div>
                 </Link>
+                {/* Veces que ha entrenado en la semana activa (lunes-domingo) */}
+                <span
+                  className="flex shrink-0 items-center gap-0.5 text-xs text-muted"
+                  title={`Ha entrenado ${row.weekTrainings} ${row.weekTrainings === 1 ? "vez" : "veces"} esta semana`}
+                  aria-label={`${row.weekTrainings} ${row.weekTrainings === 1 ? "entreno" : "entrenos"} esta semana`}
+                >
+                  <Dumbbell className="h-3 w-3" aria-hidden />
+                  <span className={cn("font-medium", row.weekTrainings > 0 && "text-fg")}>{row.weekTrainings}</span>
+                </span>
                 {row.delta !== null && row.delta !== 0 && (
                   <Badge className={row.delta > 0 ? "text-accent" : "text-red-400"}>
                     {row.delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}

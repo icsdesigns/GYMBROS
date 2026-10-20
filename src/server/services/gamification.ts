@@ -1,17 +1,36 @@
 import type { PrismaClient, PointType, NotificationType, FeedType } from "@prisma/client";
+import { ACHIEVEMENT_CATALOG } from "@/lib/achievements";
+import { ATTENDANCE_DEFAULT_POINTS, DEFAULT_RULES } from "@/lib/points";
 import { sendPushToUsers } from "./push";
 import { categoryEnabled, usersWithCategory, type NotifyCategory } from "./notify-prefs";
 
 /**
  * Servicio central de gamificación: puntos, notificaciones, feed y logros.
  * Todas las acciones relevantes pasan por aquí para que el sistema
- * de puntuación sea configurable desde la tabla PointsConfig.
+ * de puntuación sea configurable desde la tabla PointRule.
  */
 
 /**
+ * Regla de un tipo de punto. Si falta y es una de las que siempre deben existir
+ * (ver DEFAULT_RULES) se crea con su valor por defecto: así la regla nueva
+ * funciona sin depender de que alguien haya lanzado el seed.
+ */
+export async function ruleFor(db: PrismaClient, type: PointType) {
+  const rule = await db.pointRule.findUnique({ where: { type } });
+  if (rule) return rule;
+  const def = DEFAULT_RULES.find((r) => r.type === type);
+  if (!def) return null;
+  try {
+    return await db.pointRule.create({ data: { type, name: def.name, points: def.points } });
+  } catch {
+    // Otra petición la creó a la vez
+    return db.pointRule.findUnique({ where: { type } });
+  }
+}
+
+/**
  * Otorga los puntos de una regla. `units` multiplica el valor de la regla para
- * las que puntúan por cantidad (p. ej. "Entrenamiento completado" va por
- * serie) y `bonus` se suma aparte, una sola vez.
+ * las que puntúan por cantidad (p. ej. las series realizadas) y `bonus` se suma aparte, una sola vez.
  */
 export async function awardPoints(
   db: PrismaClient,
@@ -21,7 +40,7 @@ export async function awardPoints(
   units = 1,
   bonus = 0,
 ) {
-  const rule = await db.pointRule.findUnique({ where: { type } });
+  const rule = await ruleFor(db, type);
   if (!rule || !rule.enabled || rule.points <= 0) return 0;
   const points = rule.points * Math.max(units, 0) + bonus;
   if (points <= 0) return 0;
@@ -42,22 +61,27 @@ export function workoutPointUnits(exercises: Array<{ sets: Array<{ completed: bo
   return done > 0 ? done : all.length;
 }
 
-/** Puntos fijos por el simple hecho de haber entrenado, además de los de cada serie. */
-export const WORKOUT_BONUS_POINTS = 5;
+/** Puntos fijos por haber entrenado: valor por defecto de la regla de Asistencia. */
+export const WORKOUT_BONUS_POINTS = ATTENDANCE_DEFAULT_POINTS;
 
 /**
- * "Entrenamiento completado": series realizadas (ver workoutPointUnits) por el
- * valor de la regla, más WORKOUT_BONUS_POINTS por haber entrenado.
+ * Puntos de un entrenamiento terminado, en dos anotaciones separadas:
+ *  - Series (WORKOUT_COMPLETED): valor de la regla por cada serie realizada
+ *    (ver workoutPointUnits).
+ *  - Asistencia (ATTENDANCE): el valor de su regla, una vez por entrenamiento.
+ * `meta.split` las distingue de las antiguas, que juntaban ambas cosas en una.
  */
-export function awardWorkoutPoints(
+export async function awardWorkoutPoints(
   db: PrismaClient,
   userId: string,
   workoutId: string,
   exercises: Array<{ sets: Array<{ completed: boolean }> }>,
 ) {
-  return awardPoints(
-    db, userId, "WORKOUT_COMPLETED", { workoutId }, workoutPointUnits(exercises), WORKOUT_BONUS_POINTS,
+  const sets = await awardPoints(
+    db, userId, "WORKOUT_COMPLETED", { workoutId, split: true }, workoutPointUnits(exercises),
   );
+  const attendance = await awardPoints(db, userId, "ATTENDANCE", { workoutId, split: true });
+  return sets + attendance;
 }
 
 export async function notify(
@@ -116,8 +140,14 @@ export async function addFeed(
 }
 
 async function grant(db: PrismaClient, userId: string, code: string) {
-  const achievement = await db.achievement.findUnique({ where: { code } });
-  if (!achievement) return;
+  let achievement = await db.achievement.findUnique({ where: { code } });
+  if (!achievement) {
+    // El catálogo (lib/achievements) manda: si el logro aún no está en la base de datos, se da de alta
+    const def = ACHIEVEMENT_CATALOG.find((a) => a.code === code);
+    if (!def) return;
+    const { number: _number, retired: _retired, ...data } = def;
+    achievement = await db.achievement.upsert({ where: { code }, update: {}, create: data });
+  }
   const exists = await db.userAchievement.findUnique({
     where: { userId_achievementId: { userId, achievementId: achievement.id } },
   });
@@ -130,16 +160,10 @@ async function grant(db: PrismaClient, userId: string, code: string) {
 
 /** Revisa y otorga logros según el estado actual del usuario. */
 export async function checkAchievements(db: PrismaClient, userId: string) {
-  const [workouts, prs, attendances, sharedRoutines, user, volume] = await Promise.all([
+  const [workouts, prs, attendances, user, volume] = await Promise.all([
     db.workout.count({ where: { userId, endedAt: { not: null } } }),
     db.personalRecord.count({ where: { userId } }),
     db.attendance.count({ where: { userId } }),
-    // Solo cuenta si la rutina compartida es la primera que creó el usuario
-    db.routine.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-      select: { isShared: true },
-    }),
     db.user.findUnique({ where: { id: userId }, select: { currentStreak: true, bestStreak: true } }),
     db.workout.aggregate({ where: { userId }, _sum: { totalVolume: true } }),
   ]);
@@ -147,7 +171,7 @@ export async function checkAchievements(db: PrismaClient, userId: string) {
 
   if (attendances >= 1) await grant(db, userId, "FIRST_ATTENDANCE");
   if (attendances >= 25) await grant(db, userId, "ATTENDANCE_25");
-  if (sharedRoutines?.isShared) await grant(db, userId, "SHARE_FIRST");
+  // SHARE_FIRST está retirado (ver lib/achievements): ya no se concede
   if ((user?.bestStreak ?? 0) >= 1) await grant(db, userId, "STREAK_WEEK");
   if ((user?.bestStreak ?? 0) >= 5) await grant(db, userId, "STREAK_CRACK");
   if (workouts >= 1) await grant(db, userId, "FIRST_WORKOUT");

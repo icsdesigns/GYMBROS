@@ -6,7 +6,8 @@ import { es } from "date-fns/locale";
 import { Anchor, Trophy } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Spinner, EmptyState } from "@/components/ui";
-import { StableMarkLegend, StableMarkStatus } from "@/components/stable-mark";
+import { StableMarkBadge, StableMarkStatus } from "@/components/stable-mark";
+import type { StableMark } from "@/lib/stable-mark";
 import { STABLE_MARK_MIN_REPS } from "@/lib/stable-mark";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,64 @@ function Panel({
   );
 }
 
+/** Marcas de ejemplo para las leyendas de arriba (solo se pinta el estado). */
+const SAMPLE_MARK: StableMark = {
+  weight: 40,
+  sessions: 1,
+  confirmed: false,
+  firstDate: new Date(0),
+  lastDate: new Date(0),
+};
+
+/**
+ * Cabecera explicativa: en dos columnas, qué es cada uno de los dos tipos de
+ * récord personal (PR y mejor marca estable, con su verificación).
+ */
+function RecordTypesIntro() {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div className="min-w-0 rounded-2xl border border-accent/30 bg-surface p-3">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-accent">
+          <Trophy className="h-4 w-4 shrink-0" aria-hidden /> PR
+        </p>
+        <p className="mt-1.5 text-[12px] leading-snug text-muted">
+          Tu <strong className="text-fg">mayor peso</strong> levantado en una serie. Junto a él ves
+          las reps de esa serie y el <strong className="text-fg">peso total de la serie</strong>{" "}
+          (peso × reps).
+        </p>
+        <p className="mt-1.5 text-[12px] leading-snug text-muted">
+          En los ejercicios sin peso, el récord son las reps de una serie.
+        </p>
+      </div>
+
+      <div className="min-w-0 rounded-2xl border border-sky-400/30 bg-surface p-3">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-sky-500 dark:text-sky-300">
+          <Anchor className="h-4 w-4 shrink-0" aria-hidden /> Mejor marca estable
+        </p>
+        <p className="mt-1.5 text-[12px] leading-snug text-muted">
+          El mayor peso que sostienes en <strong className="text-fg">todas las series</strong> de un
+          entreno con {STABLE_MARK_MIN_REPS}+ reps cada una. Si las series llevan pesos distintos,
+          cuenta el menor.
+        </p>
+        <div className="mt-2 space-y-1.5">
+          <div className="rounded-lg bg-surface-2 p-1.5">
+            <StableMarkBadge mark={SAMPLE_MARK} inline />
+            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+              Sin verificar: lograda en un entreno
+            </p>
+          </div>
+          <div className="rounded-lg bg-sky-500/10 p-1.5">
+            <StableMarkBadge mark={{ ...SAMPLE_MARK, sessions: 2, confirmed: true }} inline />
+            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+              Verificada: repetida en 2 entrenos distintos, peso fiable
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Récords personales: para cada rutina, de cada uno de sus ejercicios, el PR
  * (peso, reps de esa serie y peso total de la serie) y la mejor marca estable
@@ -68,7 +127,7 @@ export function PRsView() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Récords personales</h1>
-      <StableMarkLegend />
+      <RecordTypesIntro />
 
       {groups.map((group) => {
         const headStep = step++;
@@ -141,17 +200,11 @@ export function PRsView() {
                               </p>
                               <StableMarkStatus mark={mark} className="mt-0.5" />
                               <p className="mt-1 text-[11px] text-muted">
-                                {STABLE_MARK_MIN_REPS}+ reps · {mark.sessions}{" "}
-                                {mark.sessions === 1 ? "entreno" : "entrenos"}
+                                {mark.sessions} {mark.sessions === 1 ? "entreno" : "entrenos"}
                               </p>
                             </>
                           ) : (
-                            <>
-                              <p className="mt-1 text-sm text-muted">Sin marca estable</p>
-                              <p className="mt-0.5 text-[11px] text-muted">
-                                {STABLE_MARK_MIN_REPS}+ reps en todas las series
-                              </p>
-                            </>
+                            <p className="mt-1 text-sm text-muted">Sin marca estable</p>
                           )}
                         </Panel>
                       )}

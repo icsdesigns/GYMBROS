@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarRange, Layers, PieChart, HeartHandshake } from "lucide-react";
+import { useState } from "react";
+import { CalendarRange, ChevronDown, Layers, PieChart, HeartHandshake } from "lucide-react";
 import { Card } from "@/components/ui";
 import { cn, MUSCLE_LABELS } from "@/lib/utils";
 
@@ -46,7 +47,10 @@ function Row({
         <span className={cn("ml-auto text-xs font-bold tabular-nums", style.text)}>{pct}%</span>
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
-        <div className={cn("h-full rounded-full", style.bar)} style={{ width: `${pct}%` }} />
+        <div
+          className={cn("gb-bar h-full w-full rounded-full", style.bar)}
+          style={{ transform: `translateX(${pct - 100}%)` }}
+        />
       </div>
       {mine && theirs && (
         <p className="text-[11px] text-muted">
@@ -61,6 +65,7 @@ function Row({
  * Afinidad de entrenamiento con el miembro cuyo perfil se está viendo.
  * Además del porcentaje, explica EN QUÉ se diferencian las dos formas de
  * entrenar; solo cuando el parecido es casi total se dice que entrenáis igual.
+ * Compacto: plegado por defecto muestra solo el porcentaje; el detalle se despliega.
  */
 export function AffinityPanel({
   affinity,
@@ -75,6 +80,8 @@ export function AffinityPanel({
   myProfileEmpty: boolean;
   theirProfileEmpty: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+
   if (!affinity || !detail) {
     return (
       <Card className="flex items-center gap-3 py-3 text-sm text-muted">
@@ -126,77 +133,87 @@ export function AffinityPanel({
     : undefined;
 
   return (
-    <Card className="space-y-4">
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface-2">
-          <HeartHandshake className={cn("h-5 w-5", style.text)} />
+    <Card className="p-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="affinity-detail"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2">
+          <HeartHandshake className={cn("h-4 w-4", style.text)} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold">Afinidad de entrenamiento</h2>
-          <p className="truncate text-xs text-muted">
-            Días por semana, tamaño de rutina y reparto muscular
-          </p>
+          <h2 className="text-sm font-semibold">Afinidad de entrenamiento</h2>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+            <div
+              className={cn("gb-bar h-full w-full rounded-full", style.bar)}
+              style={{ transform: `translateX(${affinity.total - 100}%)` }}
+            />
+          </div>
         </div>
-        <span className={cn("shrink-0 text-3xl font-extrabold leading-none", style.text)}>
+        <span className={cn("shrink-0 text-2xl font-extrabold leading-none", style.text)}>
           {affinity.total}%
         </span>
-      </div>
+        <ChevronDown
+          aria-hidden
+          className={cn("h-4 w-4 shrink-0 text-muted transition-transform", open && "rotate-180")}
+        />
+      </button>
 
-      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-        <div
-          className={cn("h-full rounded-full transition-all", style.bar)}
-          style={{ width: `${affinity.total}%` }}
-        />
-      </div>
+      <div id="affinity-detail" hidden={!open} className="space-y-3 border-t border-border px-4 pb-4 pt-3">
+        <p className="text-xs text-muted">Días por semana, tamaño de rutina y reparto muscular</p>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Row
-          icon={PieChart}
-          label="Grupos musculares"
-          pct={affinity.muscles}
-          mine={topGroupCaption ? "reparto propio" : undefined}
-          theirs={topGroupCaption}
-        />
-        <Row
-          icon={CalendarRange}
-          label="Días por semana"
-          pct={affinity.frequency}
-          mine={`${detail.frequency.mine}`}
-          theirs={`${firstName}: ${detail.frequency.theirs}`}
-        />
-        <Row
-          icon={Layers}
-          label="Tamaño de rutina"
-          pct={affinity.volume}
-          mine={`${detail.exercises.mine} ej · ${detail.sets.mine} series`}
-          theirs={`${firstName}: ${detail.exercises.theirs} ej · ${detail.sets.theirs} series`}
-        />
-      </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Row
+            icon={PieChart}
+            label="Grupos musculares"
+            pct={affinity.muscles}
+            mine={topGroupCaption ? "reparto propio" : undefined}
+            theirs={topGroupCaption}
+          />
+          <Row
+            icon={CalendarRange}
+            label="Días por semana"
+            pct={affinity.frequency}
+            mine={`${detail.frequency.mine}`}
+            theirs={`${firstName}: ${detail.frequency.theirs}`}
+          />
+          <Row
+            icon={Layers}
+            label="Tamaño de rutina"
+            pct={affinity.volume}
+            mine={`${detail.exercises.mine} ej · ${detail.sets.mine} series`}
+            theirs={`${firstName}: ${detail.exercises.theirs} ej · ${detail.sets.theirs} series`}
+          />
+        </div>
 
-      <div className="rounded-xl bg-surface-2 p-3">
-        {identical ? (
-          <p className="text-sm text-accent">
-            Entrenáis igual: mismos días, mismo tamaño de rutina y mismo reparto muscular 💪
-          </p>
-        ) : differences.length === 0 ? (
-          <p className="text-sm text-muted">
-            No hay diferencias destacables entre vuestras rutinas, solo pequeños matices.
-          </p>
-        ) : (
-          <>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-              En qué os diferenciáis
+        <div className="rounded-xl bg-surface-2 p-3">
+          {identical ? (
+            <p className="text-sm text-accent">
+              Entrenáis igual: mismos días, mismo tamaño de rutina y mismo reparto muscular 💪
             </p>
-            <ul className="space-y-1">
-              {differences.map((d) => (
-                <li key={d} className="flex gap-2 text-sm">
-                  <span className="text-muted">·</span>
-                  <span>{d}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+          ) : differences.length === 0 ? (
+            <p className="text-sm text-muted">
+              No hay diferencias destacables entre vuestras rutinas, solo pequeños matices.
+            </p>
+          ) : (
+            <>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                En qué os diferenciáis
+              </p>
+              <ul className="space-y-1">
+                {differences.map((d) => (
+                  <li key={d} className="flex gap-2 text-sm">
+                    <span className="text-muted">·</span>
+                    <span>{d}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </div>
     </Card>
   );

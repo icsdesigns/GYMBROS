@@ -160,7 +160,7 @@ export function ProgressView() {
   const enough = overall.sessions >= MIN_SESSIONS;
 
   return (
-    <div className="space-y-5">
+    <div className="gb-stagger space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h1 className="text-2xl font-bold">Progreso</h1>

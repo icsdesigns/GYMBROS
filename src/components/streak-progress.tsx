@@ -2,6 +2,7 @@
 
 import { Flame, Gem } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CountUp } from "@/components/ui";
 
 type Rule = { type: string; points: number; enabled: boolean };
 
@@ -46,7 +47,7 @@ export function StreakProgress({ streak, rules }: { streak: number; rules: Rule[
               {isCrack ? "Nivel crack" : "Racha semanal"}
             </p>
             <p className="truncate text-base font-extrabold leading-tight text-orange-100">
-              {streak} {streak === 1 ? "semana" : "semanas"}
+              <CountUp value={streak} duration={500} /> {streak === 1 ? "semana" : "semanas"}
             </p>
           </div>
         </div>

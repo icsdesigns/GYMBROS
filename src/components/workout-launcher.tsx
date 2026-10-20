@@ -41,7 +41,7 @@ export function WorkoutLauncher({ className }: { className?: string }) {
       <button
         onClick={() => router.push("/entrenar")}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 text-left text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]",
+          "flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 text-left text-white shadow-lg transition hover:brightness-110 motion-safe:active:scale-[0.97]",
           className,
         )}
       >
@@ -71,7 +71,7 @@ export function WorkoutLauncher({ className }: { className?: string }) {
           setOpen(true);
         }}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 px-5 py-4 text-left text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] animate-pulse-glow",
+          "flex w-full items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 px-5 py-4 text-left text-white shadow-lg transition hover:brightness-110 motion-safe:active:scale-[0.97] motion-safe:animate-pulse-glow",
           className,
         )}
       >

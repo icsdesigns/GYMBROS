@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Loader2, X } from "lucide-react";
 import { GymLoader } from "@/components/gym-loader";
+import { useCountUp } from "@/lib/use-count-up";
 import { forwardRef, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -20,9 +21,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition-all",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-        "disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]",
+        "disabled:opacity-50 disabled:pointer-events-none motion-safe:active:scale-[0.97]",
         variant === "primary" && "bg-accent text-accent-fg hover:brightness-110",
         variant === "secondary" && "bg-surface-2 text-fg hover:bg-border",
         variant === "ghost" && "text-muted hover:text-fg hover:bg-surface-2",
@@ -43,10 +44,15 @@ Button.displayName = "Button";
 
 // ---------- Card ----------
 
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+/** `pressable`: la tarjeta se hunde un poco al pulsarla (úsalo cuando es un enlace o botón). */
+export function Card({
+  className,
+  pressable,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { pressable?: boolean }) {
   return (
     <div
-      className={cn("rounded-2xl border border-border bg-surface p-4", className)}
+      className={cn("rounded-2xl border border-border bg-surface p-4", pressable && "gb-press", className)}
       {...props}
     />
   );
@@ -136,15 +142,45 @@ export function Avatar({
 
 // ---------- Progreso ----------
 
+/**
+ * Barra de progreso. El relleno mide siempre el 100 % y se desplaza con
+ * translateX (solo transform): al montarse se desliza desde la izquierda y al
+ * cambiar el valor se mueve a la nueva posición.
+ */
 export function ProgressBar({ value, className }: { value: number; className?: string }) {
   const pct = Math.min(100, Math.max(0, value));
   return (
     <div className={cn("h-2 w-full overflow-hidden rounded-full bg-surface-2", className)}>
       <div
-        className="h-full rounded-full bg-accent transition-all duration-500"
-        style={{ width: `${pct}%` }}
+        className="gb-bar h-full w-full rounded-full bg-accent"
+        style={{ transform: `translateX(${pct - 100}%)` }}
       />
     </div>
+  );
+}
+
+/**
+ * Número que sube hasta su valor al aparecer (y al cambiar). Ver `useCountUp`:
+ * respeta «reducir movimiento». Cifras tabulares para que el ancho no baile.
+ */
+export function CountUp({
+  value,
+  duration,
+  decimals,
+  className,
+}: {
+  value: number;
+  duration?: number;
+  decimals?: number;
+  className?: string;
+}) {
+  const shown = useCountUp(value, { duration, decimals });
+  return (
+    <span className={cn("tabular-nums", className)}>
+      {decimals
+        ? shown.toLocaleString("es-ES", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+        : shown}
+    </span>
   );
 }
 

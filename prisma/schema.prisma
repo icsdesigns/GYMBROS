@@ -374,9 +374,9 @@ model BodyMetric {
 // ---------- Puntos y ranking ----------
 
 enum PointType {
-  ATTENDANCE // ir al gimnasio
-  WORKOUT_COMPLETED // entrenamiento completado (series realizadas + 5)
-  NEW_PR // nuevo récord
+  ATTENDANCE // asistencia: +5 por haber entrenado (antes, "ir al gimnasio"; los históricos se conservan)
+  WORKOUT_COMPLETED // series realizadas: 1 punto por serie (los históricos incluyen además el +5 de asistencia)
+  NEW_PR // nuevo récord (legado: los PR ya no dan puntos, los concedidos se conservan)
   STREAK_7 // racha de 7 días
   ROUTINE_SHARED // compartir rutina
   STREAK_WEEK1 // racha: 1 semana cumplida (+15)
@@ -387,6 +387,7 @@ enum PointType {
   WEEKLY_TARGET // (legado)
   GOAL_COMPLETED // (legado)
   CUSTOM // regla personalizada otorgada por el admin
+  PROGRESS_WEEKLY // progreso semanal: ‰ del peso total de los ejercicios en verde (se concede los lunes)
 }
 
 // Reglas de puntuación configurables desde el panel de admin.

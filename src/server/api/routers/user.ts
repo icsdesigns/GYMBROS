@@ -2,9 +2,11 @@ import { z } from "zod";
 import { hash } from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
-import { startOfISOWeek, endOfISOWeek } from "date-fns";
+import { startOfISOWeek, endOfISOWeek, subYears, differenceInCalendarMonths } from "date-fns";
 import { createTRPCRouter, publicProcedure, protectedProcedure } from "@/server/api/trpc";
-import { effectiveWeekStreak, streaksForUsers } from "@/server/services/streak";
+import { effectiveWeekStreak, streaksForUsers, weekStreakState } from "@/server/services/streak";
+import { seasonAt } from "@/server/services/season";
+import { computeStableMarks } from "@/lib/stable-mark";
 import { trainingProfiles, affinityBetween, affinityDetail } from "@/server/services/affinity";
 import { sendPushToUsers } from "@/server/services/push";
 import { createGroupFor, joinGroupAs } from "@/server/api/routers/group";
@@ -334,7 +336,7 @@ export const userRouter = createTRPCRouter({
             where: { userId: user.id },
             select: {
               id: true, name: true, description: true, color: true, emoji: true,
-              recommendedDays: true, estimatedMinutes: true, isShared: true,
+              recommendedDays: true, estimatedMinutes: true,
               exercises: {
                 orderBy: { order: "asc" },
                 select: {
@@ -394,6 +396,115 @@ export const userRouter = createTRPCRouter({
         attendances, workouts, recentPRs, routines, achievements, progress, progressLock,
         totalPoints: points._sum.points ?? 0,
         pointsBreakdown: breakdownRaw.map((g) => ({ type: g.type, points: g._sum.points ?? 0, count: g._count })),
+      };
+    }),
+
+  /**
+   * Lo mismo que enseña Inicio, pero de otro miembro del grupo (o de uno mismo):
+   * su semana, racha, temporada, último año y resumen de marcas estables.
+   * Solo cifras y fechas: nunca pesos. Mismo control de acceso que publicProfile.
+   */
+  memberHome: protectedProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const memberIds = await groupMemberIds(ctx.db, ctx.groupId);
+      if (input.userId !== ctx.session.user.id && !memberIds.includes(input.userId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Ese perfil no está en tu grupo" });
+      }
+      const userId = input.userId;
+      const now = new Date();
+      const season = seasonAt(now);
+
+      const [user, weekRows, yearAttendances, firstAttendance, seasonAgg, routineExercises] = await Promise.all([
+        ctx.db.user.findUniqueOrThrow({
+          where: { id: userId },
+          select: { currentStreak: true, bestStreak: true, lastCompletedWeek: true, weeklyTargetDays: true },
+        }),
+        ctx.db.attendance.findMany({
+          where: { userId, date: { gte: startOfISOWeek(now), lte: endOfISOWeek(now) } },
+          select: { date: true },
+          orderBy: { date: "asc" },
+        }),
+        ctx.db.attendance.count({ where: { userId, date: { gte: subYears(now, 1) } } }),
+        ctx.db.attendance.findFirst({ where: { userId }, orderBy: { date: "asc" }, select: { date: true } }),
+        season.started
+          ? ctx.db.pointEvent.groupBy({
+              by: ["userId"],
+              where: { date: { gte: season.from, lte: season.to }, userId: { in: memberIds } },
+              _sum: { points: true },
+            })
+          : Promise.resolve([]),
+        ctx.db.routineExercise.findMany({
+          where: { routine: { userId }, exercise: { noWeight: false } },
+          select: { exerciseId: true },
+        }),
+      ]);
+
+      const streak = weekStreakState({
+        currentStreak: user.currentStreak,
+        lastCompletedWeek: user.lastCompletedWeek,
+        weeklyTargetDays: user.weeklyTargetDays,
+        weekCount: weekRows.length,
+        now,
+      });
+
+      // Promedio mensual del último año, igual que en Inicio
+      const monthsTracked = firstAttendance
+        ? Math.min(12, Math.max(1, differenceInCalendarMonths(now, firstAttendance.date) + 1))
+        : 1;
+
+      // Temporada: sus puntos y su puesto entre los miembros del grupo activo
+      const seasonSorted = seasonAgg
+        .map((g) => ({ userId: g.userId, points: g._sum.points ?? 0 }))
+        .sort((a, b) => b.points - a.points);
+      const seasonIdx = seasonSorted.findIndex((r) => r.userId === userId);
+
+      // Marcas estables de los ejercicios con peso de sus rutinas (solo el recuento)
+      const exerciseIds = Array.from(new Set(routineExercises.map((re) => re.exerciseId)));
+      let marks = { total: exerciseIds.length, withMark: 0, verified: 0 };
+      if (exerciseIds.length > 0) {
+        const workouts = await ctx.db.workout.findMany({
+          where: { userId, endedAt: { not: null } },
+          select: {
+            startedAt: true,
+            exercises: {
+              where: { exerciseId: { in: exerciseIds }, exercise: { noWeight: false } },
+              select: { exerciseId: true, sets: { select: { reps: true, weight: true, completed: true } } },
+            },
+          },
+        });
+        const computed = computeStableMarks(workouts);
+        marks = {
+          total: exerciseIds.length,
+          withMark: exerciseIds.filter((id) => computed[id]).length,
+          verified: exerciseIds.filter((id) => computed[id]?.confirmed).length,
+        };
+      }
+
+      return {
+        week: {
+          dates: weekRows.map((a) => a.date),
+          target: user.weeklyTargetDays,
+        },
+        streak: {
+          current: streak.streak,
+          best: user.bestStreak,
+          atRisk: streak.atRisk,
+          lost: streak.lost,
+          missing: streak.missing,
+          daysLeft: streak.daysLeft,
+        },
+        season: {
+          index: season.index,
+          started: season.started,
+          daysLeft: season.daysLeft,
+          points: seasonIdx >= 0 ? seasonSorted[seasonIdx]!.points : 0,
+          position: seasonIdx >= 0 ? seasonIdx + 1 : null,
+          players: seasonSorted.length,
+        },
+        yearAttendances,
+        monthlyAvgWorkouts: Math.round((yearAttendances / monthsTracked) * 10) / 10,
+        marks,
       };
     }),
 

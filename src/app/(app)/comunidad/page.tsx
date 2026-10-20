@@ -26,7 +26,7 @@ function CommunityContent() {
   // Precarga de ranking y grupo. El chat NO se precarga: abrirlo marca los
   // mensajes como leídos, y eso solo debe pasar cuando el usuario lo ve.
   useEffect(() => {
-    void utils.ranking.get.prefetch({ period: "week" });
+    void utils.ranking.get.prefetch({ period: "month" });
     void utils.user.list.prefetch();
   }, [utils]);
 
@@ -42,7 +42,7 @@ function CommunityContent() {
             key={key}
             onClick={() => router.replace(`/comunidad?tab=${key}`, { scroll: false })}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm transition",
+              "flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm transition motion-safe:active:scale-[0.97]",
               tab === key ? "bg-accent font-medium text-accent-fg" : "text-muted hover:text-fg",
             )}
           >
@@ -52,9 +52,9 @@ function CommunityContent() {
         ))}
       </div>
 
-      {visited.has("ranking") && <div className={tab === "ranking" ? "" : "hidden"}><RankingView /></div>}
-      {visited.has("grupo") && <div className={tab === "grupo" ? "" : "hidden"}><GroupView /></div>}
-      {visited.has("calendario") && <div className={tab === "calendario" ? "" : "hidden"}><CommunityCalendarView /></div>}
+      {visited.has("ranking") && <div className={tab === "ranking" ? "gb-tab-panel" : "hidden"}><RankingView /></div>}
+      {visited.has("grupo") && <div className={tab === "grupo" ? "gb-tab-panel" : "hidden"}><GroupView /></div>}
+      {visited.has("calendario") && <div className={tab === "calendario" ? "gb-tab-panel" : "hidden"}><CommunityCalendarView /></div>}
       {/* El chat ya no tiene pestaña: se entra desde el icono de la cabecera.
           Se monta solo cuando está activo (su sondeo marca mensajes como leídos). */}
       {tab === "chat" && <ChatView />}
