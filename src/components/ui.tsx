@@ -167,14 +167,17 @@ export function CountUp({
   value,
   duration,
   decimals,
+  delay,
   className,
 }: {
   value: number;
   duration?: number;
   decimals?: number;
+  /** Retraso del arranque en ms (para acompasarlo con una entrada en cascada). */
+  delay?: number;
   className?: string;
 }) {
-  const shown = useCountUp(value, { duration, decimals });
+  const shown = useCountUp(value, { duration, decimals, delay });
   return (
     <span className={cn("tabular-nums", className)}>
       {decimals
@@ -283,7 +286,10 @@ export function Modal({
 
   if (!open || !mounted) return null;
 
-  const hasHeader = Boolean(title || dismissible);
+  // Sin título, la X flota en la esquina: así no queda una fila de cabecera
+  // vacía que empuje el contenido hacia abajo.
+  const hasHeader = Boolean(title);
+  const floatingClose = dismissible && !title;
   const centered = placement === "center";
 
   // Portal en <body>: si se renderizara dentro de la página, un ancestro con
@@ -300,7 +306,7 @@ export function Modal({
     >
       <div
         className={cn(
-          "gb-modal-panel flex max-h-[88dvh] w-full flex-col overflow-hidden border border-border bg-surface shadow-2xl sm:rounded-2xl",
+          "gb-modal-panel relative flex max-h-[88dvh] w-full flex-col overflow-hidden border border-border bg-surface shadow-2xl sm:rounded-2xl",
           centered ? "gb-modal-centered rounded-2xl" : "rounded-t-2xl",
           MODAL_SIZES[size],
         )}
@@ -330,6 +336,16 @@ export function Modal({
               </button>
             )}
           </div>
+        )}
+
+        {floatingClose && (
+          <button
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="absolute right-3 top-3 z-10 rounded-xl p-1.5 text-muted transition hover:bg-surface-2 hover:text-fg"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
 
         <div

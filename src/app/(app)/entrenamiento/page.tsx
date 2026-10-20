@@ -37,7 +37,6 @@ function TrainingContent() {
     void utils.routine.mine.prefetch();
     void utils.routine.stats.prefetch();
     void utils.plan.get.prefetch();
-    void utils.routine.shared.prefetch();
     void utils.pr.byRoutine.prefetch();
     void utils.workout.stableMarks.prefetch();
     void utils.exercise.list.prefetch();

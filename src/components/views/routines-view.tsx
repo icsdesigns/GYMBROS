@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import {
-  Plus, Copy, Trash2, Download, FileDown, FileUp, Power, ArrowUp, ArrowDown,
+  Plus, Copy, Trash2, FileDown, FileUp, Power, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { api } from "@/trpc/react";
-import { Button, Card, Spinner, EmptyState, Avatar } from "@/components/ui";
+import { Button, Card, Spinner, EmptyState } from "@/components/ui";
 import { formatKg } from "@/lib/utils";
 
 type ExportedRoutine = {
@@ -42,7 +42,6 @@ export function RoutinesView() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const { data: mine, isLoading } = api.routine.mine.useQuery();
-  const { data: shared } = api.routine.shared.useQuery();
   const { data: stats } = api.routine.stats.useQuery();
 
   const invalidate = () => {
@@ -78,7 +77,6 @@ export function RoutinesView() {
     onError: (_err, _vars, context) => rollbackMine(context),
     onSettled: invalidate,
   });
-  const clone = api.routine.clone.useMutation({ onSuccess: invalidate });
   const toggleInPlan = api.routine.toggleInPlan.useMutation({
     onMutate: ({ id }) => {
       const current = utils.routine.mine.getData()?.find((r) => r.id === id);
@@ -223,7 +221,7 @@ export function RoutinesView() {
         <EmptyState
           icon="📋"
           title="Todavía no tienes rutinas"
-          subtitle="Crea tu primera rutina o clona una del grupo"
+          subtitle="Crea tu primera rutina"
           action={
             <Link href="/rutinas/nueva">
               <Button>Crear rutina</Button>
@@ -323,37 +321,6 @@ export function RoutinesView() {
             );
           })}
         </div>
-      )}
-
-      {(shared?.length ?? 0) > 0 && (
-        <section>
-          <h2 className="mb-4 text-lg font-semibold">Rutinas del grupo</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {shared?.map((r) => (
-              <Card key={r.id} className="flex flex-col gap-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold">
-                      {r.emoji} {r.name}
-                    </p>
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted">
-                      <Avatar name={r.user.name} src={r.user.avatarUrl} size={18} />
-                      {r.user.name} · {r.exercises.length} ejercicios
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => clone.mutate({ id: r.id })}
-                  loading={clone.isLoading}
-                >
-                  <Download className="h-3.5 w-3.5" /> Clonar a mis rutinas
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </section>
       )}
     </div>
   );

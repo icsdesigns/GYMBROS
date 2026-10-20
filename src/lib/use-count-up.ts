@@ -14,12 +14,18 @@ const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
  *   cuenta desde lo que se estaba viendo hasta el nuevo valor.
  * - Con «reducir movimiento» activo devuelve el valor tal cual, sin animar.
  * - No hay bucle permanente: el rAF se cancela al llegar al final.
+ * - `delay` (ms) retrasa el arranque para sincronizarlo con una entrada en cascada.
  *
  * Devuelve un número entero (o con `decimals` decimales).
  */
 export function useCountUp(
   value: number,
-  { duration = 700, from = 0, decimals = 0 }: { duration?: number; from?: number; decimals?: number } = {},
+  {
+    duration = 700,
+    from = 0,
+    decimals = 0,
+    delay = 0,
+  }: { duration?: number; from?: number; decimals?: number; delay?: number } = {},
 ): number {
   const [display, setDisplay] = useState(value);
   const shown = useRef(value);
@@ -40,8 +46,8 @@ export function useCountUp(
     let raf = 0;
     let t0 = 0;
     const tick = (now: number) => {
-      if (!t0) t0 = now;
-      const p = Math.min(1, (now - t0) / duration);
+      if (!t0) t0 = now + delay;
+      const p = Math.min(1, Math.max(0, (now - t0) / duration));
       const v = start + (value - start) * easeOutCubic(p);
       shown.current = Math.round(v * factor) / factor;
       setDisplay(shown.current);
@@ -51,7 +57,7 @@ export function useCountUp(
     setDisplay(start);
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [value, duration, from, decimals]);
+  }, [value, duration, from, decimals, delay]);
 
   return display;
 }

@@ -42,10 +42,35 @@ export type AppUpdate = {
   title: string;
   /** Descripción breve de qué cambia para el usuario. */
   description: string;
+  /** Cabecera animada propia de la novedad (ver components/update-card.tsx). Sin ella, se usa el emoji. */
+  visual?: "points";
+  /**
+   * Texto que se muestra EN LUGAR de `description` cuando hay `visual`: solo lo
+   * que la animación no enseña, para no repetirlo. `description` sigue siendo
+   * el texto completo y se usa si falta este campo.
+   */
+  visualText?: string;
 };
+
+/*
+ * Formato del texto (description / visualText): cada "\n" es una línea nueva.
+ * Las líneas que EMPIEZAN por un emoji se muestran como lista, con el emoji de
+ * icono; si además llevan "Algo corto: resto", "Algo corto" va en negrita.
+ */
 
 /** De la más reciente a la más antigua. */
 export const APP_UPDATES: AppUpdate[] = [
+  {
+    id: "v4.4-puntos-simplificados",
+    date: "2026-10-20",
+    emoji: "🏆",
+    title: "Puntos más simples: 4 categorías",
+    visual: "points",
+    visualText:
+      "🏅 Los PR siguen siendo récord, pero ya no dan puntos.\n👉 Mira tu desglose en Inicio › Mis puntos.",
+    description:
+      "Hemos simplificado el sistema de puntos. Ahora se gana en 4 categorías:\n\n💪 Series: 1 punto por cada serie del entreno.\n📅 Asistencia: +5 por entrenar.\n📈 Progreso: cada lunes, el 0,1 % del volumen de tus ejercicios en verde.\n🔥 Constancia: 1 semana +15, 2 +25, 3 +35, 4 o más +45.\n\nLos PR siguen siendo récord, pero ya no dan puntos. Mira tu desglose en Inicio › Mis puntos.",
+  },
   {
     id: "v4.3-marca-estable",
     date: "2026-10-13",

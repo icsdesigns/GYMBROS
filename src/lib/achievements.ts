@@ -7,8 +7,8 @@
  * seed y `grant` la rellenan desde aquí, así que añadir un logro es añadirlo a
  * ACHIEVEMENT_CATALOG y darle su condición en `checkAchievements`.
  *
- * Los logros SUGERIDOS no están activos: son datos de muestra para decidir
- * cuáles implementar. Su numeración continúa la del catálogo.
+ * Los logros SUGERIDOS (ver abajo) no están activos: sirven para decidir
+ * cuáles implementar. Hoy no queda ninguno.
  */
 
 export type AchievementRarity = "COMUN" | "RARO" | "EPICO" | "LEGENDARIO";
@@ -50,40 +50,25 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
   { number: 14, code: "VOLUME_10000", name: "10.000 kg levantados", description: "Acumula 10.000 kg de volumen total", icon: "🚛", rarity: "EPICO" },
   // Social (retirado: las rutinas ya son públicas por defecto, no hay nada que compartir)
   { number: 15, code: "SHARE_FIRST", name: "Espíritu de equipo", description: "Retirado: se daba al compartir con el grupo tu primera rutina", icon: "🤝", rarity: "COMUN", retired: true },
+  // Los números 16-18, 20, 22, 25-26, 28, 30, 33 y 35-39 quedan vacíos: eran ideas descartadas.
+  { number: 19, code: "YEAR_OF_IRON", name: "Año de hierro", description: "Entrena durante 12 meses distintos", icon: "⚙️", rarity: "EPICO" },
+  { number: 21, code: "ALL_GREEN", name: "Todo en verde", description: "Ten en verde todos los ejercicios de todas tus rutinas", icon: "🌿", rarity: "EPICO" },
+  { number: 23, code: "STABLE_MARKS_10", name: "Diez marcas estables", description: "Verifica 10 marcas estables distintas", icon: "🏰", rarity: "EPICO" },
+  { number: 24, code: "VOLUME_100000", name: "100.000 kg levantados", description: "Acumula 100.000 kg de volumen total", icon: "🚢", rarity: "LEGENDARIO" },
+  { number: 27, code: "ROUTINES_3", name: "Rutinero", description: "Crea 3 rutinas propias", icon: "📋", rarity: "COMUN" },
+  { number: 29, code: "FIRST_ON_MONDAY", name: "Primero en llegar", description: "Sé el primero del grupo en entrenar un lunes", icon: "🚩", rarity: "COMUN" },
+  { number: 31, code: "SEASON_CHAMPION", name: "Campeón de temporada", description: "Gana una temporada del ranking", icon: "🏆", rarity: "LEGENDARIO" },
+  { number: 32, code: "COMEBACK", name: "Vuelta al ruedo", description: "Retoma el plan tras perder una racha de 4 semanas o más", icon: "♻️", rarity: "COMUN" },
+  { number: 34, code: "WORKOUT_BUDDY", name: "Compañero de batalla", description: "Entrena el mismo día que otro miembro 10 veces", icon: "🤜", rarity: "RARO" },
+  { number: 40, code: "COLLECTOR", name: "Coleccionista", description: "Consigue todos los logros", icon: "🧩", rarity: "LEGENDARIO" },
 ];
 
 /** Logro propuesto, aún sin implementar ni sembrar. */
 export type AchievementSuggestion = Omit<AchievementDef, "code"> & { code?: string };
 
 /**
- * Sugerencias para el largo plazo. NO están activas: no existen en la base de
- * datos ni se otorgan. La numeración sigue a la del catálogo para poder
- * referirse a ellas por número.
+ * Sugerencias para el largo plazo. Ahora mismo no hay ninguna pendiente: las
+ * elegidas pasaron al catálogo (conservando su número) y el resto se descartó.
+ * Si se añaden, NO están activas: no existen en la base de datos ni se otorgan.
  */
-export const ACHIEVEMENT_SUGGESTIONS: AchievementSuggestion[] = [
-  { number: 16, name: "Madrugador", description: "Termina 10 entrenamientos que empezaron antes de las 8:00", icon: "🌅", rarity: "RARO" },
-  { number: 17, name: "Noctámbulo", description: "Termina 10 entrenamientos que empezaron después de las 21:00", icon: "🌙", rarity: "RARO" },
-  { number: 18, name: "Semana perfecta", description: "Cumple todos los días de tu plan 4 semanas distintas", icon: "🗓️", rarity: "RARO" },
-  { number: 19, name: "Año de hierro", description: "Entrena durante 12 meses distintos", icon: "⚙️", rarity: "EPICO" },
-  { number: 20, name: "En verde", description: "Ten 5 ejercicios en verde a la vez", icon: "🟢", rarity: "COMUN" },
-  { number: 21, name: "Todo en verde", description: "Ten en verde todos los ejercicios de una rutina", icon: "🌿", rarity: "EPICO" },
-  { number: 22, name: "Marca estable", description: "Verifica tu primera marca estable", icon: "🧱", rarity: "COMUN" },
-  { number: 23, name: "Diez marcas estables", description: "Verifica 10 marcas estables distintas", icon: "🏰", rarity: "EPICO" },
-  { number: 24, name: "100.000 kg levantados", description: "Acumula 100.000 kg de volumen total", icon: "🚢", rarity: "LEGENDARIO" },
-  { number: 25, name: "Mil series", description: "Completa 1.000 series en total", icon: "🔁", rarity: "EPICO" },
-  { number: 26, name: "Maratón de volumen", description: "Mueve más de 5.000 kg en un solo entrenamiento", icon: "🏔️", rarity: "RARO" },
-  { number: 27, name: "Rutinero", description: "Crea 3 rutinas propias", icon: "📋", rarity: "COMUN" },
-  { number: 28, name: "Inspirador", description: "Que alguien del grupo copie una rutina que compartiste", icon: "💡", rarity: "RARO" },
-  { number: 29, name: "Primero en llegar", description: "Sé el primero del grupo en entrenar un lunes", icon: "🚩", rarity: "COMUN" },
-  { number: 30, name: "Pico de temporada", description: "Acaba una temporada en el podio del ranking", icon: "🥇", rarity: "EPICO" },
-  { number: 31, name: "Campeón de temporada", description: "Gana una temporada del ranking", icon: "🏆", rarity: "LEGENDARIO" },
-  { number: 32, name: "Vuelta al ruedo", description: "Retoma el plan tras perder una racha de 4 semanas o más", icon: "♻️", rarity: "COMUN" },
-  { number: 33, name: "Sin excusas", description: "Entrena en 3 festivos distintos", icon: "🎉", rarity: "RARO" },
-  { number: 34, name: "Compañero de batalla", description: "Entrena el mismo día que otro miembro 10 veces", icon: "🤜", rarity: "RARO" },
-  { number: 35, name: "Polivalente", description: "Entrena los 8 grupos musculares en un mismo mes", icon: "🧬", rarity: "RARO" },
-  { number: 36, name: "Racha de 1 año", description: "Cumple tu plan 52 semanas seguidas", icon: "👑", rarity: "LEGENDARIO" },
-  { number: 37, name: "Corrector de rumbo", description: "Usa una incidencia para corregir un entreno y mantén la racha", icon: "🛠️", rarity: "COMUN" },
-  { number: 38, name: "Cartel completo", description: "Consigue puntos en las 4 categorías en una misma semana", icon: "🎴", rarity: "RARO" },
-  { number: 39, name: "Récord de semana", description: "Bate tu mejor semana de puntos", icon: "⚡", rarity: "RARO" },
-  { number: 40, name: "Coleccionista", description: "Consigue 20 logros", icon: "🧩", rarity: "LEGENDARIO" },
-];
+export const ACHIEVEMENT_SUGGESTIONS: AchievementSuggestion[] = [];

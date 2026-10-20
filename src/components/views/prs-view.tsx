@@ -51,51 +51,101 @@ const SAMPLE_MARK: StableMark = {
   lastDate: new Date(0),
 };
 
+/** Tarjeta de la cabecera: icono en recuadro, título, una frase y un ejemplo visual. */
+function IntroCard({
+  icon,
+  title,
+  tone,
+  border,
+  chip,
+  lead,
+  example,
+  className,
+}: {
+  icon: ReactNode;
+  title: string;
+  tone: string;
+  border: string;
+  chip: string;
+  lead: ReactNode;
+  example: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "gb-rise flex min-w-0 flex-col gap-2.5 rounded-2xl border bg-gradient-to-b to-transparent p-3",
+        border,
+        className,
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", chip, tone)}>
+          {icon}
+        </span>
+        <p className={cn("text-sm font-semibold leading-tight", tone)}>{title}</p>
+      </div>
+      <p className="text-[12px] leading-snug text-muted">{lead}</p>
+      <div className="mt-auto">{example}</div>
+    </div>
+  );
+}
+
 /**
  * Cabecera explicativa: en dos columnas, qué es cada uno de los dos tipos de
  * récord personal (PR y mejor marca estable, con su verificación).
  */
 function RecordTypesIntro() {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <div className="min-w-0 rounded-2xl border border-accent/30 bg-surface p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-accent">
-          <Trophy className="h-4 w-4 shrink-0" aria-hidden /> PR
-        </p>
-        <p className="mt-1.5 text-[12px] leading-snug text-muted">
-          Tu <strong className="text-fg">mayor peso</strong> levantado en una serie. Junto a él ves
-          las reps de esa serie y el <strong className="text-fg">peso total de la serie</strong>{" "}
-          (peso × reps).
-        </p>
-        <p className="mt-1.5 text-[12px] leading-snug text-muted">
-          En los ejercicios sin peso, el récord son las reps de una serie.
-        </p>
-      </div>
+    <div className="grid grid-cols-2 gap-2.5">
+      <IntroCard
+        icon={<Trophy className="h-4 w-4" aria-hidden />}
+        title="PR"
+        tone="text-accent"
+        border="border-accent/30 from-accent/10"
+        chip="bg-accent/15"
+        lead={
+          <>
+            Tu <strong className="text-fg">mayor peso</strong> en una sola serie, con sus reps. Sin
+            peso, las reps de una serie.
+          </>
+        }
+        example={
+          <div className="rounded-xl bg-surface-2 p-2">
+            <p className="text-base font-bold leading-none text-accent">60 kg</p>
+            <p className="mt-1 text-[11px] text-muted">
+              8 reps · serie <span className="font-semibold text-fg">480 kg</span>
+            </p>
+          </div>
+        }
+      />
 
-      <div className="min-w-0 rounded-2xl border border-sky-400/30 bg-surface p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-sky-500 dark:text-sky-300">
-          <Anchor className="h-4 w-4 shrink-0" aria-hidden /> Mejor marca estable
-        </p>
-        <p className="mt-1.5 text-[12px] leading-snug text-muted">
-          El mayor peso que sostienes en <strong className="text-fg">todas las series</strong> de un
-          entreno con {STABLE_MARK_MIN_REPS}+ reps cada una. Si las series llevan pesos distintos,
-          cuenta el menor.
-        </p>
-        <div className="mt-2 space-y-1.5">
-          <div className="rounded-lg bg-surface-2 p-1.5">
-            <StableMarkBadge mark={SAMPLE_MARK} inline />
-            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-              Sin verificar: lograda en un entreno
-            </p>
+      <IntroCard
+        icon={<Anchor className="h-4 w-4" aria-hidden />}
+        title="Mejor marca estable"
+        tone="text-sky-500 dark:text-sky-300"
+        border="border-sky-400/30 from-sky-400/10"
+        chip="bg-sky-400/15"
+        lead={
+          <>
+            El peso que sostienes en <strong className="text-fg">todas las series</strong> de un
+            entreno con {STABLE_MARK_MIN_REPS}+ reps. Con pesos distintos, cuenta el menor.
+          </>
+        }
+        example={
+          <div className="space-y-1">
+            <div className="rounded-xl bg-surface-2 p-1.5">
+              <StableMarkBadge mark={SAMPLE_MARK} inline />
+              <p className="mt-0.5 text-[10px] leading-snug text-muted">Lograda en 1 entreno</p>
+            </div>
+            <div className="rounded-xl bg-sky-500/10 p-1.5">
+              <StableMarkBadge mark={{ ...SAMPLE_MARK, sessions: 2, confirmed: true }} inline />
+              <p className="mt-0.5 text-[10px] leading-snug text-muted">Repetida en 2: fiable</p>
+            </div>
           </div>
-          <div className="rounded-lg bg-sky-500/10 p-1.5">
-            <StableMarkBadge mark={{ ...SAMPLE_MARK, sessions: 2, confirmed: true }} inline />
-            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-              Verificada: repetida en 2 entrenos distintos, peso fiable
-            </p>
-          </div>
-        </div>
-      </div>
+        }
+        className="gb-rise"
+      />
     </div>
   );
 }

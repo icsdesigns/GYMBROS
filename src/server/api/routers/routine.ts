@@ -4,7 +4,6 @@ import { MuscleGroup } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { MAX_WORKOUT_MS } from "@/server/services/workout-service";
 import { syncWeeklyTarget } from "@/server/services/weekly-target";
-import { groupMemberIds } from "@/server/services/group";
 
 const routineExerciseInput = z.object({
   exerciseId: z.string(),
@@ -291,53 +290,4 @@ export const routineRouter = createTRPCRouter({
       return imported;
     }),
 
-  // Rutinas del resto del grupo activo, públicas por defecto (sin pesos: son privados)
-  shared: protectedProcedure.query(async ({ ctx }) => {
-    const memberIds = (await groupMemberIds(ctx.db, ctx.groupId)).filter((id) => id !== ctx.session.user.id);
-    if (memberIds.length === 0) return [];
-    const routines = await ctx.db.routine.findMany({
-      where: { userId: { in: memberIds } },
-      include: {
-        user: { select: { id: true, name: true, avatarUrl: true } },
-        exercises: { include: { exercise: true }, orderBy: { order: "asc" } },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-    return routines.map((r) => ({
-      ...r,
-      exercises: r.exercises.map((e) => ({ ...e, targetWeight: null, notes: null })),
-    }));
-  }),
-
-  // Clonar la rutina de otro usuario (las rutinas del grupo son públicas)
-  clone: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
-    const original = await ctx.db.routine.findUnique({
-      where: { id: input.id },
-      include: { exercises: true, user: { select: { name: true } } },
-    });
-    if (!original) throw new TRPCError({ code: "NOT_FOUND", message: "Rutina no encontrada" });
-    const cloned = await ctx.db.routine.create({
-      data: {
-        userId: ctx.session.user.id,
-        order: await nextOrder(ctx.db, ctx.session.user.id),
-        name: original.name,
-        description: `Clonada de ${original.user.name}`,
-        color: original.color,
-        emoji: original.emoji,
-        recommendedDays: original.recommendedDays,
-        timesPerWeek: original.timesPerWeek,
-        estimatedMinutes: original.estimatedMinutes,
-        clonedFromId: original.id,
-        exercises: {
-          create: original.exercises.map((e) => ({
-            exerciseId: e.exerciseId, order: e.order, sets: e.sets, reps: e.reps,
-            // Los pesos del dueño original son privados: el clon empieza sin pesos
-            targetWeight: null, restSeconds: e.restSeconds, notes: null,
-          })),
-        },
-      },
-    });
-    await syncWeeklyTarget(ctx.db, ctx.session.user.id);
-    return cloned;
-  }),
 });

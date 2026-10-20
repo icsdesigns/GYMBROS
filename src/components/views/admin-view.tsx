@@ -6,9 +6,11 @@ import { Shield, Trash2, Megaphone, MessageSquare, Check, Undo2, BarChart3, Eye,
 import { api } from "@/trpc/react";
 import { Button, Card, Input, Label, Spinner, Badge, Modal } from "@/components/ui";
 import { PollAnswerCard } from "@/components/poll-card";
+import { UpdateBody, UpdateReactions } from "@/components/update-card";
+import { APP_UPDATES } from "@/lib/updates";
 import { cn } from "@/lib/utils";
 import { POINT_CATEGORIES, RULE_INFO } from "@/lib/points";
-import { ACHIEVEMENT_CATALOG, ACHIEVEMENT_SUGGESTIONS } from "@/lib/achievements";
+import { ACHIEVEMENT_CATALOG } from "@/lib/achievements";
 
 
 /**
@@ -78,6 +80,9 @@ export function AdminView() {
   const { data: rules } = api.admin.listRules.useQuery();
   const { data: feedbacks } = api.feedback.listAll.useQuery();
   const { data: updateReactions } = api.update.reactions.useQuery();
+  // Vista previa de una novedad: se puede abrir tantas veces como haga falta, sin registrar vista ni reacción
+  const [previewUpdateId, setPreviewUpdateId] = useState<string | null>(null);
+  const previewUpdate = APP_UPDATES.find((u) => u.id === previewUpdateId) ?? null;
 
   const [broadcast, setBroadcast] = useState({ title: "", body: "" });
   const [sent, setSent] = useState<{ sent: number; skipped: number } | null>(null);
@@ -261,7 +266,7 @@ export function AdminView() {
         })}
       </AdminSection>
 
-      {/* Logros: catálogo activo y sugerencias, con numeración continua */}
+      {/* Logros: catálogo activo, numerado */}
       <AdminSection icon={<Award className="h-4 w-4" />} title="Logros">
         <p className="text-xs text-muted">
           Catálogo activo, numerado para poder referirse a cada logro por su número. Vive en{" "}
@@ -284,27 +289,6 @@ export function AdminView() {
             </li>
           ))}
         </ul>
-
-        <div className="space-y-2 border-t border-border pt-3">
-          <h3 className="text-sm font-semibold">Sugerencias a largo plazo</h3>
-          <p className="text-xs text-muted">
-            Ideas aún sin implementar (no se otorgan). La numeración continúa la del catálogo.
-          </p>
-          <ul className="space-y-2">
-            {ACHIEVEMENT_SUGGESTIONS.map((a) => (
-              <li key={a.number} className="flex items-start gap-2 rounded-xl border border-dashed border-border p-2.5">
-                <span className="w-7 shrink-0 text-right text-sm font-bold text-muted">{a.number}.</span>
-                <div className="min-w-0 flex-1">
-                  <p className="break-words text-sm font-medium leading-snug">
-                    {a.icon} {a.name}{" "}
-                    <span className="text-[11px] font-normal uppercase tracking-wide text-muted">{a.rarity}</span>
-                  </p>
-                  <p className="break-words text-xs text-muted">{a.description}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
       </AdminSection>
 
       {/* Encuestas */}
@@ -712,12 +696,30 @@ export function AdminView() {
                 <div className="flex gap-4 text-xs">
                   <span className="text-accent">👍 {u.like}</span>
                   <span className="text-amber-400">🫠 {u.meh}</span>
+                  <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setPreviewUpdateId(u.id)}>
+                    <Eye className="h-3.5 w-3.5" /> Ver novedad
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </AdminSection>
+
+      <Modal
+        open={!!previewUpdate}
+        onClose={() => setPreviewUpdateId(null)}
+        placement="center"
+        size="sm"
+        footer={
+          <div className="space-y-3">
+            <UpdateReactions onReact={() => setPreviewUpdateId(null)} />
+            <p className="text-center text-[11px] text-muted">Vista previa: no cuenta como vista ni reacción.</p>
+          </div>
+        }
+      >
+        {previewUpdate && <UpdateBody key={previewUpdate.id} update={previewUpdate} />}
+      </Modal>
     </div>
   );
 }

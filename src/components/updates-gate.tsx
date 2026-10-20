@@ -5,6 +5,7 @@ import { MessageSquarePlus } from "lucide-react";
 import { createPortal } from "react-dom";
 import { api } from "@/trpc/react";
 import { Modal } from "@/components/ui";
+import { UpdateBody, UpdateReactions } from "@/components/update-card";
 import { pushSupported } from "@/lib/push";
 
 /** Lo que dura el desvanecimiento del aviso final. */
@@ -60,50 +61,13 @@ export function UpdatesGate() {
         placement="center"
         size="sm"
         dismissible={false}
+        footer={<UpdateReactions onReact={close} />}
       >
-        <div className="space-y-4 py-1 text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-            Novedad en GymBros
-          </p>
-
-          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10 text-4xl">
-            {update?.emoji}
-          </span>
-
-          <div className="space-y-1.5">
-            <h2 className="text-xl font-bold leading-tight">{update?.title}</h2>
-            <p className="whitespace-pre-line text-sm leading-snug text-muted">{update?.description}</p>
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <ReactionButton emoji="👍" label="¡Me gusta!" onClick={() => close("LIKE")} />
-            <ReactionButton emoji="🫠" label="Sin más" onClick={() => close("MEH")} />
-          </div>
-        </div>
+        {update && <UpdateBody update={update} />}
       </Modal>
 
       {farewell && <FarewellToast />}
     </>
-  );
-}
-
-function ReactionButton({
-  emoji,
-  label,
-  onClick,
-}: {
-  emoji: string;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex flex-1 flex-col items-center gap-1 rounded-2xl border border-border bg-surface-2 py-3 transition hover:border-accent/50 hover:bg-accent/10 active:scale-[0.97]"
-    >
-      <span className="text-2xl leading-none">{emoji}</span>
-      <span className="text-xs font-medium text-muted">{label}</span>
-    </button>
   );
 }
 
