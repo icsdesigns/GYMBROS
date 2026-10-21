@@ -11,6 +11,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "db:backfill-groups": "tsx prisma/backfill-groups.ts",
+    "db:backfill-achievements": "tsx prisma/backfill-achievements.ts",
     "db:recalc-workout-points": "tsx prisma/recalc-workout-points.ts"
   },
   "prisma": {

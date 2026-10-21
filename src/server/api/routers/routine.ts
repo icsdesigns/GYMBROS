@@ -4,6 +4,7 @@ import { MuscleGroup } from "@prisma/client";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { MAX_WORKOUT_MS } from "@/server/services/workout-service";
 import { syncWeeklyTarget } from "@/server/services/weekly-target";
+import { checkAchievements } from "@/server/services/gamification";
 
 const routineExerciseInput = z.object({
   exerciseId: z.string(),
@@ -89,6 +90,7 @@ export const routineRouter = createTRPCRouter({
       },
     });
     await syncWeeklyTarget(ctx.db, ctx.session.user.id);
+    await checkAchievements(ctx.db, ctx.session.user.id);
     return routine;
   }),
 
@@ -141,6 +143,7 @@ export const routineRouter = createTRPCRouter({
       },
     });
     await syncWeeklyTarget(ctx.db, ctx.session.user.id);
+    await checkAchievements(ctx.db, ctx.session.user.id);
     return copy;
   }),
 
@@ -287,6 +290,7 @@ export const routineRouter = createTRPCRouter({
         },
       });
       await syncWeeklyTarget(ctx.db, userId);
+      await checkAchievements(ctx.db, userId);
       return imported;
     }),
 

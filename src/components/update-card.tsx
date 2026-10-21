@@ -133,15 +133,15 @@ function EmojiHero({ emoji, baseDelay }: { emoji: string; baseDelay: number }) {
       />
       <span
         aria-hidden
-        className="gb-ring-in absolute h-24 w-24 rounded-full border border-accent/15"
+        className="gb-ring-in absolute h-[104px] w-[104px] rounded-full border border-accent/15"
         style={{ animationDelay: `${baseDelay + 120}ms` }}
       />
       <span
         aria-hidden
-        className="gb-ring-in absolute h-16 w-16 rounded-full border border-accent/25 bg-accent/10"
+        className="gb-ring-in absolute h-[72px] w-[72px] rounded-full border border-accent/25 bg-accent/10"
         style={{ animationDelay: `${baseDelay + 60}ms` }}
       />
-      <span className="gb-pop-in relative text-5xl leading-none" style={{ animationDelay: `${baseDelay + 100}ms` }}>
+      <span className="gb-pop-in relative text-[40px] leading-none" style={{ animationDelay: `${baseDelay + 100}ms` }}>
         {emoji}
       </span>
     </div>

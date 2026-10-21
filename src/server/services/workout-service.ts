@@ -310,7 +310,13 @@ export async function finishWorkout(
       "Pasaron 3 horas sin pulsar Finalizar, así que lo guardamos por ti.",
     );
   }
-  await checkAchievements(db, userId);
+  // Al terminar un entreno también se revisan los logros caros (tendencias, marcas, lunes, temporadas)
+  // Es un efecto secundario: si falla, el entreno (ya cerrado) y el plan siguen adelante
+  try {
+    await checkAchievements(db, userId, { heavy: true });
+  } catch (error) {
+    console.error("[logros] fallo al revisar logros tras el entreno", error);
+  }
 
   // Avanzar el plan de entrenamiento si se completó la rutina que tocaba
   if (workout.routineId) {

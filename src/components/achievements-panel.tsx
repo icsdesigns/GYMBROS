@@ -24,7 +24,8 @@ const RARITY_LABEL: Record<AchievementRarity, string> = {
 };
 
 /**
- * Panel de logros de Inicio: una casilla por logro del catálogo, a color los
+ * Panel de logros de Inicio, compacto: contador con barra de progreso y una
+ * rejilla densa con una casilla por logro del catálogo, a color los
  * conseguidos y apagados los pendientes (primero los conseguidos, el más
  * reciente delante). Al tocar una casilla se lee qué pide y, si ya lo tienes,
  * cuándo lo conseguiste.
@@ -49,17 +50,30 @@ export function AchievementsPanel() {
   const currentAt = current ? earnedAt.get(current.code) : undefined;
 
   return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 font-semibold">
+    <Card className="p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           <Award className="h-4 w-4 text-gold" /> Logros
         </h2>
-        <span className="text-xs text-muted">
-          {done} de {rows.length}
+        <span className="text-xs tabular-nums text-muted">
+          <strong className="text-fg">{done}</strong>/{rows.length}
         </span>
       </div>
+      <div
+        className="mb-2.5 h-1 overflow-hidden rounded-full bg-surface-2"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={rows.length}
+        aria-valuenow={done}
+        aria-label="Logros conseguidos"
+      >
+        <div
+          className="h-full w-full origin-left rounded-full bg-gold transition-transform duration-500 motion-reduce:transition-none"
+          style={{ transform: `scaleX(${rows.length > 0 ? done / rows.length : 0})` }}
+        />
+      </div>
 
-      <div className="grid grid-cols-5 gap-2 sm:grid-cols-8">
+      <div className="grid grid-cols-8 gap-1 sm:grid-cols-12">
         {rows.map((a) => {
           const got = earnedAt.has(a.code);
           return (
@@ -70,7 +84,7 @@ export function AchievementsPanel() {
               aria-label={`${a.name}${got ? "" : " (pendiente)"}`}
               aria-pressed={selected === a.code}
               className={cn(
-                "flex aspect-square items-center justify-center rounded-xl bg-surface-2 text-2xl ring-1 ring-inset transition",
+                "flex aspect-square items-center justify-center rounded-lg bg-surface-2 text-base leading-none ring-1 ring-inset transition-opacity",
                 got ? RARITY_RING[a.rarity] : "ring-transparent grayscale",
                 !got && "opacity-35",
                 selected === a.code && "ring-2 ring-accent",
@@ -82,7 +96,7 @@ export function AchievementsPanel() {
         })}
       </div>
 
-      <p className="mt-3 min-h-[2.5rem] text-xs text-muted">
+      <p className="mt-2 min-h-[2rem] text-[11px] leading-snug text-muted">
         {current ? (
           <>
             <strong className="text-fg">{current.icon} {current.name}</strong> · {RARITY_LABEL[current.rarity]}

@@ -61,6 +61,14 @@ export type AppUpdate = {
 /** De la más reciente a la más antigua. */
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: "v4.5-logros",
+    date: "2026-10-21",
+    emoji: "🏅",
+    title: "¡Llegan los logros!",
+    description:
+      "Ahora cada entreno, racha y récord puede desbloquear un logro. Hay de entrenos, asistencia, constancia, récords, volumen, marcas estables y temporadas.\n\n🏠 Dónde verlos: en Inicio, en el panel de logros. Toca uno para ver cómo se consigue.\n🔔 Cada logro se anuncia al grupo en el chat.\n🧩 El último: conseguirlos todos. ¿Te atreves?",
+  },
+  {
     id: "v4.4-puntos-simplificados",
     date: "2026-10-20",
     emoji: "🏆",
