@@ -3,7 +3,7 @@
  *  NOVEDADES DE LA APP — registro central
  * ============================================================================
  *
- * Cada entrada de esta lista se muestra UNA sola vez a cada usuario, en una
+ * Cada entrada PUBLICADA de esta lista se muestra UNA sola vez a cada usuario, en una
  * ventana emergente centrada, con dos botones de reacción (👍 / 🫠).
  *
  * CÓMO AÑADIR UNA NOVEDAD
@@ -17,7 +17,12 @@
  *  3. `title` es la actualización en cuestión: corto y concreto.
  *     `description` la resume en dos o tres frases, sin tecnicismos.
  *     `emoji` encabeza la ventana; uno solo, que represente el cambio.
- *  4. No hace falta tocar la base de datos ni desplegar nada más.
+ *  4. Añadirla al array NO la publica: se queda como BORRADOR y desplegar no
+ *     la muestra a nadie. Se publica a mano desde Ajustes (admin) › "Reacciones
+ *     a las novedades", con el botón "Publicar" de esa novedad (puedes revisarla
+ *     antes con "Ver novedad"). Publicar guarda una fila en la tabla
+ *     UpdatePublication (updateId + fecha) y es irreversible desde la app.
+ *     No hace falta tocar la base de datos ni nada más.
  *
  * CUÁNDO SE MUESTRA
  * -----------------
@@ -121,8 +126,12 @@ export const APP_UPDATES: AppUpdate[] = [
   },
 ];
 
-/** La novedad más reciente que el usuario todavía no ha visto. */
-export function nextUpdateFor(seenIds: string[]): AppUpdate | null {
+/**
+ * La novedad más reciente que el usuario todavía no ha visto. Solo cuentan las
+ * PUBLICADAS (las que tienen fila en UpdatePublication): el resto son borradores.
+ */
+export function nextUpdateFor(seenIds: string[], publishedIds: string[]): AppUpdate | null {
   const seen = new Set(seenIds);
-  return APP_UPDATES.find((u) => !seen.has(u.id)) ?? null;
+  const published = new Set(publishedIds);
+  return APP_UPDATES.find((u) => published.has(u.id) && !seen.has(u.id)) ?? null;
 }

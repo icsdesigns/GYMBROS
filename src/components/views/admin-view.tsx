@@ -83,6 +83,14 @@ export function AdminView() {
   // Vista previa de una novedad: se puede abrir tantas veces como haga falta, sin registrar vista ni reacción
   const [previewUpdateId, setPreviewUpdateId] = useState<string | null>(null);
   const previewUpdate = APP_UPDATES.find((u) => u.id === previewUpdateId) ?? null;
+  // Publicar una novedad: desde ese momento la ven todos los usuarios
+  const publishUpdate = api.update.publish.useMutation({
+    onSuccess: () => {
+      void utils.update.reactions.invalidate();
+      // El propio admin también tiene que verla (y el aviso del gimnasio debe esperar)
+      void utils.update.pending.invalidate();
+    },
+  });
 
   const [broadcast, setBroadcast] = useState({ title: "", body: "" });
   const [sent, setSent] = useState<{ sent: number; skipped: number } | null>(null);
@@ -653,7 +661,8 @@ export function AdminView() {
       <AdminSection icon={<Sparkles className="h-4 w-4" />} title="Reacciones a las novedades">
         <p className="text-xs text-muted">
           Recuento anónimo: se ve cuánta gente ha reaccionado, pero nunca quién ha votado qué.
-          Las novedades se dan de alta en <code className="text-fg">src/lib/updates.ts</code>.
+          Las novedades se dan de alta en <code className="text-fg">src/lib/updates.ts</code> como borrador y
+          no las ve nadie hasta que se pulsa "Publicar".
         </p>
         {(updateReactions?.length ?? 0) === 0 ? (
           <p className="text-sm text-muted">No hay ninguna novedad publicada.</p>
@@ -668,7 +677,9 @@ export function AdminView() {
                     </p>
                     <p className="text-xs text-muted">
                       {format(new Date(u.date), "d MMM yyyy")} ·{" "}
-                      {u.seen === 0
+                      {!u.publishedAt
+                        ? "borrador"
+                        : u.seen === 0
                         ? "sin reacciones todavía"
                         : `${u.seen} ${u.seen === 1 ? "respuesta" : "respuestas"}`}
                       {u.pending > 0 && ` · ${u.pending} sin ver`}
@@ -696,9 +707,31 @@ export function AdminView() {
                 <div className="flex gap-4 text-xs">
                   <span className="text-accent">👍 {u.like}</span>
                   <span className="text-amber-400">🫠 {u.meh}</span>
-                  <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setPreviewUpdateId(u.id)}>
-                    <Eye className="h-3.5 w-3.5" /> Ver novedad
-                  </Button>
+                  <div className="ml-auto flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setPreviewUpdateId(u.id)}>
+                      <Eye className="h-3.5 w-3.5" /> Ver novedad
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!!u.publishedAt}
+                      loading={publishUpdate.isLoading && publishUpdate.variables?.updateId === u.id}
+                      onClick={() => {
+                        if (window.confirm("¿Publicar esta novedad? La verán todos los usuarios")) {
+                          publishUpdate.mutate({ updateId: u.id });
+                        }
+                      }}
+                    >
+                      {u.publishedAt ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" /> Publicada · {format(new Date(u.publishedAt), "d MMM yyyy")}
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-3.5 w-3.5" /> Publicar
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

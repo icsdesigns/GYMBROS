@@ -675,6 +675,14 @@ model UpdateSeen {
   @@index([updateId])
 }
 
+// Novedades publicadas. Una novedad del catálogo (src/lib/updates.ts) solo se
+// muestra a los usuarios si su id está aquí; se publica desde Ajustes de admin.
+model UpdatePublication {
+  updateId      String   @id // id de la novedad en src/lib/updates.ts
+  publishedAt   DateTime @default(now())
+  publishedById String? // admin que la publicó (sin relación: no altera otras tablas)
+}
+
 // ---------- Plantillas de notificación (disparador fijo, contenido editable) ----------
 
 model NotificationTemplate {
