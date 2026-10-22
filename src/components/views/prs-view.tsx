@@ -74,19 +74,26 @@ function IntroCard({
   return (
     <div
       className={cn(
-        "gb-rise flex min-w-0 flex-col gap-2.5 rounded-2xl border bg-gradient-to-b to-transparent p-3",
+        "gb-rise flex min-w-0 flex-col gap-3 rounded-2xl border bg-gradient-to-b to-transparent p-3",
         border,
         className,
       )}
     >
-      <div className="flex items-center gap-2">
-        <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", chip, tone)}>
-          {icon}
+      {/* El icono es la seña de identidad de cada tipo de récord: grande y en primer plano.
+          Cabecera apilada y centrada. Todos los bloques separados por el mismo gap (sin alturas mínimas ni anclajes que abran huecos variables). */}
+      <div className="flex flex-col items-center gap-2 text-center">
+        {/* gb-pop fuerza inline-block: va en un envoltorio para no romper el centrado del recuadro */}
+        <span className="gb-pop">
+          <span className={cn("flex h-16 w-16 items-center justify-center rounded-2xl", chip, tone)}>
+            {icon}
+          </span>
         </span>
-        <p className={cn("text-sm font-semibold leading-tight", tone)}>{title}</p>
+        <p className={cn("text-[15px] font-bold leading-tight", tone)}>
+          {title}
+        </p>
       </div>
-      <p className="text-[12px] leading-snug text-muted">{lead}</p>
-      <div className="mt-auto">{example}</div>
+      <p className="text-center text-[12px] leading-snug text-muted">{lead}</p>
+            <div>{example}</div>
     </div>
   );
 }
@@ -99,7 +106,7 @@ function RecordTypesIntro() {
   return (
     <div className="grid grid-cols-2 gap-2.5">
       <IntroCard
-        icon={<Trophy className="h-4 w-4" aria-hidden />}
+        icon={<Trophy className="h-8 w-8" strokeWidth={2.25} aria-hidden />}
         title="PR"
         tone="text-accent"
         border="border-accent/30 from-accent/10"
@@ -107,21 +114,28 @@ function RecordTypesIntro() {
         lead={
           <>
             Tu <strong className="text-fg">mayor peso</strong> en una sola serie, con sus reps. Sin
-            peso, las reps de una serie.
+            peso, las reps de una serie. Se actualiza solo al terminar cada entreno.
           </>
         }
         example={
-          <div className="rounded-xl bg-surface-2 p-2">
-            <p className="text-base font-bold leading-none text-accent">60 kg</p>
-            <p className="mt-1 text-[11px] text-muted">
-              8 reps · serie <span className="font-semibold text-fg">480 kg</span>
-            </p>
+          <div className="grid h-[7.25rem] grid-rows-3 divide-y divide-border/60 overflow-hidden rounded-xl bg-surface-2">
+            <p className="flex items-center px-3 text-base font-bold leading-none text-accent">60 kg</p>
+            <div className="flex items-center px-3">
+              <p className="text-[11px] leading-snug text-muted">
+                8 reps · serie <span className="font-semibold text-fg">480 kg</span>
+              </p>
+            </div>
+            <div className="flex items-center px-3">
+              <p className="text-[11px] leading-snug text-muted">
+                Sin peso: <span className="font-semibold text-fg">15 reps</span>
+              </p>
+            </div>
           </div>
         }
       />
 
       <IntroCard
-        icon={<Anchor className="h-4 w-4" aria-hidden />}
+        icon={<Anchor className="h-8 w-8" strokeWidth={2.25} aria-hidden />}
         title="Mejor marca estable"
         tone="text-sky-500 dark:text-sky-300"
         border="border-sky-400/30 from-sky-400/10"
@@ -133,18 +147,17 @@ function RecordTypesIntro() {
           </>
         }
         example={
-          <div className="space-y-1">
-            <div className="rounded-xl bg-surface-2 p-1.5">
+          <div className="grid h-[7.25rem] grid-rows-2 divide-y divide-border/60 overflow-hidden rounded-xl bg-surface-2">
+            <div className="flex flex-col justify-center px-3">
               <StableMarkBadge mark={SAMPLE_MARK} inline />
-              <p className="mt-0.5 text-[10px] leading-snug text-muted">Lograda en 1 entreno</p>
+              <p className="mt-1 text-[10px] leading-snug text-muted">Lograda en 1 entreno</p>
             </div>
-            <div className="rounded-xl bg-sky-500/10 p-1.5">
+            <div className="bg-sky-500/10 flex flex-col justify-center px-3">
               <StableMarkBadge mark={{ ...SAMPLE_MARK, sessions: 2, confirmed: true }} inline />
-              <p className="mt-0.5 text-[10px] leading-snug text-muted">Repetida en 2: fiable</p>
+              <p className="mt-1 text-[10px] leading-snug text-muted">Repetida en 2: fiable</p>
             </div>
           </div>
         }
-        className="gb-rise"
       />
     </div>
   );
